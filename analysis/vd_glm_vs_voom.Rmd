@@ -1,0 +1,138 @@
+---
+title: "Compare RNA-seq gene-wise variance decomposition via glm vs. voom"
+author: "Mengyin Lu"
+date: 2016-01-20
+---
+
+**Last updated:** `r Sys.Date()`
+
+**Code version:** `r system("git log -1 --format='%H'", intern = TRUE)`
+
+```{r chunk-options, include=FALSE}
+source("chunk-options.R")
+```
+
+This is a template for writing reports with R Markdown.
+
+## Objectives
+
+Suppose we have RNA-seq data of $N$ samples from $K$ groups. We want to estimate $r_g$, the ratio of within-group variation and between-group variation for each gene, i.e. do gene-wise variance decompostion analysis.
+
+Two possible ways:
+
+1. Suppose the model of counts is: 
+\begin{align}
+Y_{gi} &\sim Pois(\lambda_{gi}), \\
+\log(\lambda_{gi}) &= \mu_g+\beta_{g,c(i)}+e_{gi}, \\
+e_{gi}\sim N(0,\sigma_{ge}^2), &\quad \beta_{g,c(i)}\sim N(0,\sigma_{gc}^2).
+\end{align}
+Then $\hat{r}_g^{(GLM)} = \frac{\hat{\sigma_{ge}^2}}{\hat{\sigma_{gc}^2}}$.
+
+2. First apply voom transformation on counts, then do ANOVA for the transformed data: $\hat{r}_g^{(voom)} = MST_g/MSE_g$.
+
+## Simulation
+Extract GTEx RNA-seq data from 10 tissues, with 50 samples for each tissue. 
+```{r}
+library(edgeR)
+library(limma)
+
+datamaker = function(args){
+  counts = NULL
+  for (tis in args$tissue){
+    rawdata = read.table(paste0("/Volumes/PERSONAL/MS/gtex/tissues/",tis,".txt"),header=TRUE)
+    counts = cbind(counts,as.matrix(rawdata[,1:args$Nsamp]))
+  }
+  rm("rawdata")  
+
+  # Remove genes without any reads
+  counts = counts[apply(counts,1,sum)>0,]
+
+  condition = factor(rep(1:length(args$tissue),each=args$Nsamp))
+  
+  # Voom transformation
+  dgecounts = DGEList(counts=counts,group=condition)
+  dgecounts = calcNormFactors(dgecounts)
+  design = model.matrix(~condition)
+  v = voom(dgecounts,design,plot=FALSE)
+  dgecounts = estimateDisp(dgecounts, design, robust=TRUE)
+  avelogcpm = dgecounts$AveLogCPM
+  
+  # meta data
+  meta = list(args=args)
+  
+  # input data
+  input = list(counts=counts, condition=condition, v=v, avelogcpm=avelogcpm)  
+  data = list(meta=meta,input=input)
+  return(data)
+}
+
+# Compute the ratios (sigma_c/sigma_e) for each gene
+# Model: y~Pois(lambda), lambda=mu+b_cond+e, where b_cond~N(0,sigma_c^2), e~N(0,sigma_e^2)
+varcomp_glmm = function(counts, condition){
+  apply(counts,1,glmm_ratio,condition=condition)
+}
+
+library(lme4)
+glmm_ratio = function(y,condition){
+  obs = factor(1:length(y))
+  fit = try(glmer(y~(1|condition)+(1|obs),family=poisson))
+  
+  # Ratio = sigma_c/sigma_e
+  if (class(fit)=="try-error"){
+    ratio = NA
+  }else{
+    ratio = sqrt(as.numeric(summary(fit)$varcor$condition)/
+                   as.numeric(summary(fit)$varcor$obs))
+  }
+  
+  return(ratio)
+}
+
+varcomp_voom = function(v, condition){
+  combo = cbind(v$E,v$weights)
+  apply(combo,1,voom_ratio,condition=condition)
+}
+
+voom_ratio = function(ynweights,condition){
+  y = ynweights[1:(length(ynweights)/2)]
+  weights = ynweights[(length(ynweights)/2+1):length(ynweights)]
+  fit = lm(y~condition, weights=weights)
+  ratio = sqrt(max(anova(fit)$F[1]-1,0)/length(unique(condition)))
+  return(ratio)
+}
+```
+
+```{r}
+args = list(tissue=c("Brain-Amygdala",
+                     "Brain-Anteriorcingulatecortex(BA24)",
+                     "Brain-Caudate(basalganglia)",
+                     "Brain-CerebellarHemisphere",
+                     "Brain-Cerebellum",
+                     "Brain-Cortex",
+                     "Brain-FrontalCortex(BA9)",
+                     "Brain-Hippocampus",
+                     "Brain-Hypothalamus",
+                     "Brain-Nucleusaccumbens(basalganglia)"),
+            Nsamp=50)
+#data = datamaker(args)
+```
+
+Compute $\hat{r}_g^{(GLM)}$ and $\hat{r}_g^{(voom)}$ for top 10,000 genes and compare them. 
+```{r}
+load("/Volumes/PERSONAL/MS/fash/appli_gtex.RData")
+#r.voom = varcomp_voom(data$input$v[1:10000,], data$input$condition)
+#r.glmm = varcomp_glmm(data$input$counts[1:10000,], data$input$condition)
+
+plot(log(r.voom), log(r.glmm), xlab="ratio_voom", ylab="ratio_glmm")
+plot(data$input$avelogcpm[1:10000],log(r.voom),xlab="Ave log-cpm",ylab="ratio",main="Ratio=sigma_c/sigma_e (Voom)")
+plot(data$input$avelogcpm[1:10000],log(r.glmm),xlab="Ave log-cpm",ylab="ratio",main="Ratio=sigma_c/sigma_e (GLMM)")
+```
+
+Seems $\hat{r}_g^{(GLM)}$ can be very unstable when log-cpm is low?
+$\hat{r}_g^{(voom)}$ is a smooth function of log-cpm?
+
+## Session information
+
+```{r info}
+sessionInfo()
+```
