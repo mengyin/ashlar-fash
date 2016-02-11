@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+<meta name="author" content="Mengyin Lu" />
+
+<meta name="date" content="2016-02-10" />
+
+<title>A simulation example to compare variance decomposition by GLMM vs voom+ANOVA</title>
+
+<script src="libs/jquery-1.11.0/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="libs/bootstrap-3.3.1/css/united.min.css" rel="stylesheet" />
+<script src="libs/bootstrap-3.3.1/js/bootstrap.min.js"></script>
+<script src="libs/bootstrap-3.3.1/shim/html5shiv.min.js"></script>
+<script src="libs/bootstrap-3.3.1/shim/respond.min.js"></script>
+
+<style type="text/css">
+
+/* padding for bootstrap navbar */
+body {
+  padding-top: 50px;
+  padding-bottom: 40px;
+}
+
+
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h2 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+.section h3 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+
+
+
+/* don't use link color in navbar */
+.dropdown-menu>li>a {
+  color: black;
+}
+
+/* some padding for disqus */
+#disqus_thread {
+  margin-top: 45px;
+}
+
+</style>
+
+<link rel="stylesheet" href="libs/font-awesome-4.1.0/css/font-awesome.min.css"/>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="libs/highlight/textmate.css"
+      type="text/css" />
+<script src="libs/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img { 
+  max-width:100%; 
+  height: auto; 
+}
+</style>
+<div class="container-fluid main-container">
+
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">ashlar</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="license.html">License</a></li>
+        <li><a href="https://github.com/jhsiao999/ashlar">GitHub</a></li>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+<h1 class="title">A simulation example to compare variance decomposition by GLMM vs voom+ANOVA</h1>
+<h4 class="author"><em>Mengyin Lu</em></h4>
+<h4 class="date"><em>2016-02-10</em></h4>
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#session-information">Session information</a></li>
+</ul>
+</div>
+
+<p><strong>Last updated:</strong> 2016-02-10</p>
+<p><strong>Code version:</strong> 4805492d8e6eeaa8da3fd2ee38cdca1eb6c816ea</p>
+We simulate the count matrix from the following GLMM model
+\begin{align}
+Y_{gi} &amp;\sim Pois(\lambda_{gi}), \\
+\log(\lambda_{gi}) &amp;= \mu_g+\beta_{g,c(i)}+e_{gi}, \\
+e_{gi}\sim N(0,\sigma_{ge}^2), &amp;\quad \beta_{g,c(i)}\sim N(0,\sigma_{gc}^2).
+\end{align}
+<p>where <span class="math inline">\(\beta\)</span> is the condition effect, <span class="math inline">\(e\)</span> is the random error (or sample effect).</p>
+<p>We define <span class="math inline">\(r_g^{(GLMM)} := \frac{\sigma_{ge}^2}{\sigma_{gc}^2}\)</span>, which is the ratio of condition variation and sample variation. We are interested in estimating <span class="math inline">\(r_g^{(GLMM)}\)</span>, or at least ranking the genes by this ratio.</p>
+<pre class="r"><code>set.seed(10000)
+
+library(edgeR)</code></pre>
+<pre><code>Loading required package: limma</code></pre>
+<pre class="r"><code>library(limma)
+
+# Ngene: # of genes
+# Nsamp: # of samples for each group
+# K: number of groups
+# logrmean, logrsd: generate true log(r)&#39;s from N(logrmean, logrsd)
+# mumean, musd: generate true mu&#39;s from N(logrmean, logrsd)
+simcounts = function(Ngene, Nsamp, K, logrmean, logrsd, mumean, musd){
+  sigma.e = rep(0.2,Ngene)
+  logratio = rnorm(Ngene, mean=logrmean, sd=logrsd) #log(sigma.c^2/sigma.e^2)
+  sigma.c = exp((logratio+2*log(sigma.e))/2)
+  
+  mu = rnorm(Ngene, mumean, musd)
+  beta = matrix(rep(rnorm(Ngene*K, 0, rep(sigma.c^2,each=K)),each=Nsamp), nrow=Ngene, byrow=TRUE)
+  e = matrix(rnorm(Ngene*K*Nsamp, 0, rep(sigma.e^2,each=K*Nsamp)), nrow=Ngene, byrow=TRUE)
+  
+  lambda = exp(mu+beta+e)
+  
+  counts = matrix(rpois(Ngene*K*Nsamp, lambda), nrow=Ngene)
+  condition = factor(rep(1:K,each=Nsamp))
+  return(list(counts=counts, condition=condition, logratio=logratio))
+}
+
+# Voom transformation &amp; variance decomposition (ANOVA)
+varcomp_voom = function(counts, condition){
+  dgecounts = DGEList(counts=counts,group=condition)
+  dgecounts = calcNormFactors(dgecounts)
+  design = model.matrix(~condition)
+  v = voom(dgecounts,design,plot=FALSE)
+  dgecounts = estimateDisp(dgecounts, design, robust=TRUE)
+  avelogcpm = dgecounts$AveLogCPM
+  
+  combo = cbind(v$E,v$weights)
+  ratios = apply(combo,1,voom_ratio,condition=condition)
+  return(list(logratio = log(ratios), avelogcpm=avelogcpm))
+}
+
+# r.voom is defined by ANOVA&#39;s MST/MSE
+voom_ratio = function(ynweights,condition){
+  y = ynweights[1:(length(ynweights)/2)]
+  weights = ynweights[(length(ynweights)/2+1):length(ynweights)]
+  fit = lm(y~condition, weights=weights)
+  ratio = sqrt(max(anova(fit)$F[1]-1,0)/length(unique(condition)))
+  return(ratio)
+}
+
+# Compute the ratios (sigma_c/sigma_e) for each gene
+# Model: y~Pois(lambda), lambda=mu+b_cond+e, where b_cond~N(0,sigma_c^2), e~N(0,sigma_e^2)
+varcomp_glmm = function(counts, condition){
+  ratios = apply(counts,1,glmm_ratio,condition=condition)
+  return(list(logratio = log(ratios)))
+}
+
+library(lme4)</code></pre>
+<pre><code>Loading required package: Matrix</code></pre>
+<pre class="r"><code>glmm_ratio = function(y,condition){
+  obs = factor(1:length(y))
+  fit = try(glmer(y~(1|condition)+(1|obs),family=poisson))
+  
+  # Ratio = sigma_c/sigma_e
+  if (class(fit)==&quot;try-error&quot;){
+    ratio = NA
+  }else{
+    ratio = sqrt(as.numeric(summary(fit)$varcor$condition)/
+                   as.numeric(summary(fit)$varcor$obs))
+  }
+  
+  return(ratio)
+}</code></pre>
+<p>We simulate a count dataset, with 20 groups and 20 samples for each group (so the sample size is sufficient big).</p>
+<p>We can estimate <span class="math inline">\(r_g^{(GLMM)}\)</span>’s by GLMM (REML). Another way is to run ANOVA on voom transformed data, and use <span class="math inline">\(\hat{r}_g^{(voom)}:=MST_g/MSE_g\)</span> to estimate the ratio of variations explained by condition effect &amp; sample variation. Note that ANOVA is doing variance decomposition on log-cpm instead of the hidden Poisson mean space, so <span class="math inline">\(r_g^{(voom)}\)</span> and <span class="math inline">\(r_g^{(GLMM)}\)</span> are different quantities so not directly comparable! But we still hope the two ratios are correlated and have similar rankings.</p>
+<p>We compare the true <span class="math inline">\(r_g^{(GLMM)}\)</span>’s against their GLMM estimates and <span class="math inline">\(\hat{r}_g^{(voom)}\)</span>:</p>
+<p>Voom+ANOVA: <span class="math inline">\(\hat{r}_g^{(voom)}\)</span>’s are highly correlated with the true <span class="math inline">\(r_g^{(GLMM)}\)</span>’s! Correlation&gt;0.9. GLMM(REML): Has some outliers (very inaccurate estimates, especially for low-expressed genes). Correlation between estimates and true log-ratios is less than 0.7. Possible drawbacks of REML: REML is unstable in estimating variance components especially at some boundry conditions, and the computation time is much slower.</p>
+<p>So maybe voom+ANOVA is a better choice? In this example it’s more stable, faster and accurate.</p>
+<pre class="r"><code>data = simcounts(Ngene=1000, Nsamp=20, K=20, logrmean=0, logrsd=1, mumean=6, musd=0.5)
+voomr = varcomp_voom(data$counts, data$condition)
+glmmr = varcomp_glmm(data$counts, data$condition)
+
+plot(data$logratio,voomr$logratio,xlab=&quot;true log(r)&quot;,
+     ylab=&quot;voom+ANOVA estimated log(r)&quot;)
+abline(0,1)</code></pre>
+<p><img src="figure/voomr_simcounts.Rmd/unnamed-chunk-2-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>sum(voomr$logratio==-Inf)</code></pre>
+<pre><code>[1] 36</code></pre>
+<pre class="r"><code>cor(data$logratio[abs(voomr$logratio)!=Inf],voomr$logratio[abs(voomr$logratio)!=Inf])</code></pre>
+<pre><code>[1] 0.949803</code></pre>
+<pre class="r"><code>plot(data$logratio,glmmr$logratio,xlab=&quot;true log(r)&quot;,
+     ylab=&quot;GLMM estimated log(r)&quot;)
+abline(0,1)</code></pre>
+<p><img src="figure/voomr_simcounts.Rmd/unnamed-chunk-2-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>sum(glmmr$logratio==-Inf)</code></pre>
+<pre><code>[1] 37</code></pre>
+<pre class="r"><code>cor(data$logratio[abs(glmmr$logratio)!=Inf],glmmr$logratio[abs(glmmr$logratio)!=Inf])</code></pre>
+<pre><code>[1] 0.6947711</code></pre>
+<p>Try another example with small sample size: 4 groups and 5 samples for each group.</p>
+<pre class="r"><code>data2 = simcounts(Ngene=1000, Nsamp=5, K=4, logrmean=0, logrsd=1.5, mumean=6, musd=1)
+voomr2 = varcomp_voom(data2$counts, data2$condition)
+glmmr2 = varcomp_glmm(data2$counts, data2$condition)</code></pre>
+<pre><code>Warning in checkConv(attr(opt, &quot;derivs&quot;), opt$par, ctrl = control
+$checkConv, : Model failed to converge with max|grad| = 0.0024274 (tol =
+0.001, component 1)</code></pre>
+<pre><code>Warning in checkConv(attr(opt, &quot;derivs&quot;), opt$par, ctrl = control
+$checkConv, : unable to evaluate scaled gradient</code></pre>
+<pre><code>Warning in checkConv(attr(opt, &quot;derivs&quot;), opt$par, ctrl = control
+$checkConv, : Model failed to converge: degenerate Hessian with 1 negative
+eigenvalues</code></pre>
+<pre><code>Warning in checkConv(attr(opt, &quot;derivs&quot;), opt$par, ctrl = control
+$checkConv, : Model failed to converge with max|grad| = 0.00146303 (tol =
+0.001, component 1)</code></pre>
+<pre><code>Warning in checkConv(attr(opt, &quot;derivs&quot;), opt$par, ctrl = control
+$checkConv, : Model failed to converge with max|grad| = 0.00122041 (tol =
+0.001, component 1)</code></pre>
+<pre class="r"><code>plot(data2$logratio,voomr2$logratio,xlab=&quot;true log(r)&quot;,
+     ylab=&quot;voom+ANOVA estimated log(r)&quot;)
+abline(0,1)</code></pre>
+<p><img src="figure/voomr_simcounts.Rmd/unnamed-chunk-3-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>sum(voomr2$logratio==-Inf,na.rm=TRUE)</code></pre>
+<pre><code>[1] 250</code></pre>
+<pre class="r"><code>cor(data2$logratio[abs(voomr2$logratio)!=Inf],voomr2$logratio[abs(voomr2$logratio)!=Inf])</code></pre>
+<pre><code>[1] 0.7718458</code></pre>
+<pre class="r"><code>plot(data2$logratio,glmmr2$logratio,xlab=&quot;true log(r)&quot;,
+     ylab=&quot;GLMM estimated log(r)&quot;)
+abline(0,1)</code></pre>
+<p><img src="figure/voomr_simcounts.Rmd/unnamed-chunk-3-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>sum(glmmr2$logratio==-Inf,na.rm=TRUE)</code></pre>
+<pre><code>[1] 261</code></pre>
+<pre class="r"><code>cor(data2$logratio[abs(glmmr2$logratio)!=Inf &amp; !is.na(glmmr2$logratio)],
+    glmmr2$logratio[abs(glmmr2$logratio)!=Inf&amp; !is.na(glmmr2$logratio)])</code></pre>
+<pre><code>[1] 0.3841322</code></pre>
+<div id="session-information" class="section level2">
+<h2>Session information</h2>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.2.3 (2015-12-10)
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+Running under: OS X 10.10.5 (Yosemite)
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] lme4_1.1-10   Matrix_1.2-3  edgeR_3.10.5  limma_3.24.15 knitr_1.12   
+
+loaded via a namespace (and not attached):
+ [1] locfit_1.5-9.1  Rcpp_0.12.2     lattice_0.20-33 digest_0.6.8   
+ [5] MASS_7.3-45     grid_3.2.3      nlme_3.1-122    formatR_1.2.1  
+ [9] magrittr_1.5    evaluate_0.8    stringi_1.0-1   minqa_1.2.4    
+[13] nloptr_1.0.4    rmarkdown_0.9.2 splines_3.2.3   statmod_1.4.23 
+[17] tools_3.2.3     stringr_1.0.0   yaml_2.1.13     htmltools_0.3  </code></pre>
+</div>
+
+
+<!-- some extra javascript for older browsers -->
+<script type="text/javascript" src="libs/polyfill.js"></script>
+
+<script>
+
+// manage active state of menu based on current page
+$(document).ready(function () {
+
+    // active menu
+    href = window.location.pathname
+    href = href.substr(href.lastIndexOf('/') + 1)
+    $('a[href="' + href + '"]').parent().addClass('active');
+
+    // manage active menu header
+    if (href.startsWith('authoring_'))
+      $('a[href="' + 'authoring' + '"]').parent().addClass('active');
+    else if (href.endsWith('_format.html'))
+      $('a[href="' + 'formats' + '"]').parent().addClass('active');
+    else if (href.startsWith('developer_'))
+      $('a[href="' + 'developer' + '"]').parent().addClass('active');
+
+});
+
+</script>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

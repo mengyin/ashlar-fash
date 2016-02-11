@@ -1,5 +1,5 @@
 ---
-title: "Compare RNA-seq gene-wise variance decomposition via glm vs. voom"
+title: "Compare RNA-seq gene-wise variance decomposition via glm vs voom using GTEx data"
 author: "Mengyin Lu"
 date: 2016-01-20
 ---
