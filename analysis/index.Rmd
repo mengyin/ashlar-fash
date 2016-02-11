@@ -13,4 +13,5 @@ title: "Home"
 
 ## Using Rmardown to document anaysis: 
 
-*  [Compare RNA-seq gene-wise variance decomposition via glm vs. voom](vd_glm_vs_voom.html)
+*  [Compare RNA-seq gene-wise variance decomposition via glm vs. voom using GTEx data](vd_glm_vs_voom.html)
+*  [A simulation example to compare variance decomposition by GLMM vs voom+ANOVA](voomr_simcounts.html)
