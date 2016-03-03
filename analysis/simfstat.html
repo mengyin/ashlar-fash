@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+
+<title>An example of using fash to reduce estimation MSE on simulated F-stats</title>
+
+<script src="libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="libs/bootstrap-3.3.5/css/united.min.css" rel="stylesheet" />
+<script src="libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+
+<style type="text/css">
+
+/* padding for bootstrap navbar */
+body {
+  padding-top: 50px;
+  padding-bottom: 40px;
+}
+
+
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h2 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+.section h3 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+
+
+
+/* don't use link color in navbar */
+.dropdown-menu>li>a {
+  color: black;
+}
+
+/* some padding for disqus */
+#disqus_thread {
+  margin-top: 45px;
+}
+
+</style>
+
+<link rel="stylesheet" href="libs/font-awesome-4.1.0/css/font-awesome.min.css"/>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="libs/highlight/textmate.css"
+      type="text/css" />
+<script src="libs/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script src="libs/navigation-1.0/tabsets.js"></script>
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">ashlar</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="license.html">License</a></li>
+        <li><a href="https://github.com/jhsiao999/ashlar">GitHub</a></li>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+<h1 class="title">An example of using fash to reduce estimation MSE on simulated F-stats</h1>
+
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#a-moderate-df-scenario-df110-df210">A moderate df scenario (df1=10, df2=10)</a></li>
+<li><a href="#a-unbalanced-df-scenario-df15-df230">A unbalanced df scenario (df1=5, df2=30)</a></li>
+<li><a href="#a-large-df-scenario-df150-df250">A large df scenario (df1=50, df2=50)</a></li>
+<li><a href="#session-information">Session information</a></li>
+</ul>
+</div>
+
+<p><strong>Last updated:</strong> 2016-03-03</p>
+<p><strong>Code version:</strong> 0f59d974ab59b5e0cc4849d66e6b28777fea518a</p>
+We simulate F-statistics from the following model:
+\begin{align}
+\hat{F}_g &amp;= \alpha_g \times F(df_1, df_2), \\
+\log(\alpha_g) &amp;\sim g(\cdot),
+\end{align}
+<p>where <span class="math inline">\(g(\cdot)\)</span> is an non-negative unimodal prior for <span class="math inline">\(\log(\alpha_g)\)</span> with mode at 0: <span class="math inline">\(g=\pi_0 \delta_0 + \pi_1 U(0, a)\)</span>.</p>
+<p>We are interested in estimating parameters <span class="math inline">\(\alpha_g\)</span>. In the linear regression model we have <span class="math inline">\(\alpha_g=1+C\frac{\sigma_g^2}{s_g^2}\)</span> where <span class="math inline">\(\sigma^2\)</span> is the variance of treatment effects and <span class="math inline">\(s^2\)</span> is the variance of errors. So <span class="math inline">\(\alpha_g \geq 1\)</span> (<span class="math inline">\(\alpha_g=1\)</span> iff <span class="math inline">\(\sigma^2=0\)</span>) and that is why we let <span class="math inline">\(g\)</span> be non-negative.</p>
+<pre class="r"><code>source(&#39;/Volumes/PERSONAL/MS/fash/fash.R&#39;)</code></pre>
+<pre><code>Loading required package: stats4</code></pre>
+<pre><code>Loading required package: evd</code></pre>
+<pre><code>
+Attaching package: &#39;evd&#39;</code></pre>
+<pre><code>The following object is masked from &#39;package:ashr&#39;:
+
+    dens</code></pre>
+<pre class="r"><code>library(qvalue)</code></pre>
+<pre><code>Warning: replacing previous import by &#39;grid::arrow&#39; when loading &#39;qvalue&#39;</code></pre>
+<pre><code>Warning: replacing previous import by &#39;grid::unit&#39; when loading &#39;qvalue&#39;</code></pre>
+<pre class="r"><code># N: # of genes
+# Nnull: # of nulls
+# altsd: alternative prior component is U(-a,a) or U(0,a)
+# oneside: flag, whether prior is positive (U(0,a)) or can be negative (U(-a,a))
+sim_f = function(N,Nnull,df1,df2,altsd,oneside=TRUE){
+  null = c(rep(1,Nnull),rep(0,N-Nnull))
+  logalpha = rep(0,N)
+  if (Nnull&lt;N){
+    if (oneside==TRUE){
+      logalpha[(Nnull+1):N] = runif(N-Nnull,0,altsd)
+    }else{
+      logalpha[(Nnull+1):N] = runif(N-Nnull,-altsd,altsd)
+    } 
+  } 
+  
+  alpha = exp(logalpha)
+  #Fhat = alpha*rf(N,df1=df1,df2=df2)
+  logfhat = logalpha+log(rf(N,df1,df2))
+  Fhat = exp(logfhat)
+  return(list(Fhat=Fhat, logfhat=logfhat,
+              logalpha=logalpha, null=null,
+              df1=df1, df2=df2))
+}</code></pre>
+<div id="a-moderate-df-scenario-df110-df210" class="section level2">
+<h2>A moderate df scenario (df1=10, df2=10)</h2>
+<pre class="r"><code>set.seed(999)
+
+# oneside
+data = sim_f(N=10000,Nnull=8000,df1=10,df2=10,altsd=4,oneside=TRUE)
+test = fash(data$Fhat, df1=data$df1, df2=data$df2, 
+                    oneside=TRUE, mixsd=4)
+test$fitted.g</code></pre>
+<pre><code>$pi
+[1] 0.8006402 0.1993598
+
+$a
+[1] 0 0
+
+$b
+[1] 0 4
+
+attr(,&quot;row.names&quot;)
+[1] 1 2
+attr(,&quot;class&quot;)
+[1] &quot;unimix&quot;</code></pre>
+<pre class="r"><code>Fpvalue = 1-pf(data$Fhat,data$df1,data$df2)
+qval.f = qvalue(Fpvalue)$qval</code></pre>
+<p>Compare the MSE’s: fash gives much lower MSE (in estimating “(_g)“).</p>
+<pre class="r"><code># MSE of F-test
+mean((data$logalpha-log(data$Fhat))^2)</code></pre>
+<pre><code>[1] 0.4499705</code></pre>
+<pre class="r"><code># MSE of fash
+mean((data$logalpha-test$PosteriorMean.logf)^2)</code></pre>
+<pre><code>[1] 0.1357355</code></pre>
+<p>Compare the FDR’s of fash and raw F-test:</p>
+<ul>
+<li>Ranking of genes: almost same.</li>
+<li>F-test sometimes overestimates FDR, while fash can precisely estimate FDR.</li>
+</ul>
+<p><img src="figure/simfstat.Rmd/unnamed-chunk-4-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /><img src="figure/simfstat.Rmd/unnamed-chunk-4-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /><img src="figure/simfstat.Rmd/unnamed-chunk-4-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="a-unbalanced-df-scenario-df15-df230" class="section level2">
+<h2>A unbalanced df scenario (df1=5, df2=30)</h2>
+<pre class="r"><code># oneside
+data = sim_f(N=10000,Nnull=8000,df1=5,df2=30,altsd=4,oneside=TRUE)
+test = fash(data$Fhat, df1=data$df1, df2=data$df2, 
+                    oneside=TRUE, mixsd=4)
+test$fitted.g</code></pre>
+<pre><code>$pi
+[1] 0.8020231 0.1979769
+
+$a
+[1] 0 0
+
+$b
+[1] 0 4
+
+attr(,&quot;row.names&quot;)
+[1] 1 2
+attr(,&quot;class&quot;)
+[1] &quot;unimix&quot;</code></pre>
+<pre class="r"><code>Fpvalue = 1-pf(data$Fhat,data$df1,data$df2)
+qval.f = qvalue(Fpvalue)$qval</code></pre>
+<p>Compare the MSE’s: fash gives lower MSE (in estimating “<span class="math inline">\(\log(\alpha_g)\)</span>”).</p>
+<pre class="r"><code># MSE of F-test
+mean((data$logalpha-log(data$Fhat))^2)</code></pre>
+<pre><code>[1] 0.5860714</code></pre>
+<pre class="r"><code># MSE of fash
+mean((data$logalpha-test$PosteriorMean.logf)^2)</code></pre>
+<pre><code>[1] 0.1396507</code></pre>
+<p>Compare the FDR’s of fash and raw F-test: F-test sometimes slightly overestimates FDR, but fash doesn’t.</p>
+<p><img src="figure/simfstat.Rmd/unnamed-chunk-7-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /><img src="figure/simfstat.Rmd/unnamed-chunk-7-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /><img src="figure/simfstat.Rmd/unnamed-chunk-7-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="a-large-df-scenario-df150-df250" class="section level2">
+<h2>A large df scenario (df1=50, df2=50)</h2>
+<pre class="r"><code># oneside
+data = sim_f(N=10000,Nnull=8000,df1=50,df2=50,altsd=4,oneside=TRUE)
+test = fash(data$Fhat, df1=data$df1, df2=data$df2, 
+                    oneside=TRUE, mixsd=4)
+test$fitted.g</code></pre>
+<pre><code>$pi
+[1] 0.8001052 0.1998948
+
+$a
+[1] 0 0
+
+$b
+[1] 0 4
+
+attr(,&quot;row.names&quot;)
+[1] 1 2
+attr(,&quot;class&quot;)
+[1] &quot;unimix&quot;</code></pre>
+<pre class="r"><code>Fpvalue = 1-pf(data$Fhat,data$df1,data$df2)
+qval.f = qvalue(Fpvalue)$qval</code></pre>
+<p>Compare the MSE’s: fash gives lower MSE (in estimating “<span class="math inline">\(\log(\alpha_g)\)</span>”).</p>
+<pre class="r"><code># MSE of F-test
+mean((data$logalpha-log(data$Fhat))^2)</code></pre>
+<pre><code>[1] 0.08136193</code></pre>
+<pre class="r"><code># MSE of fash
+mean((data$logalpha-test$PosteriorMean.logf)^2)</code></pre>
+<pre><code>[1] 0.02172878</code></pre>
+<p>Compare the FDR’s of fash and raw F-test: almost same (which makes sense since the sample size is already quite large).</p>
+<p><img src="figure/simfstat.Rmd/unnamed-chunk-10-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /><img src="figure/simfstat.Rmd/unnamed-chunk-10-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /><img src="figure/simfstat.Rmd/unnamed-chunk-10-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="session-information" class="section level2">
+<h2>Session information</h2>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.2.3 (2015-12-10)
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+Running under: OS X 10.10.5 (Yosemite)
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+[1] REBayes_0.62    Matrix_1.2-3    qvalue_2.2.0    truncdist_1.0-1
+[5] evd_2.3-2       ashr_1.0.12     knitr_1.12.3   
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_0.12.3       magrittr_1.5      splines_3.2.3    
+ [4] MASS_7.3-45       munsell_0.4.3     doParallel_1.0.10
+ [7] pscl_1.4.9        colorspace_1.2-6  SQUAREM_2014.8-1 
+[10] lattice_0.20-33   foreach_1.4.3     plyr_1.8.3       
+[13] stringr_1.0.0     tools_3.2.3       parallel_3.2.3   
+[16] grid_3.2.3        gtable_0.1.2      htmltools_0.3    
+[19] iterators_1.0.8   yaml_2.1.13       digest_0.6.9     
+[22] reshape2_1.4.1    ggplot2_2.0.0     formatR_1.2.1    
+[25] codetools_0.2-14  evaluate_0.8      rmarkdown_0.9.5  
+[28] stringi_1.0-1     Rmosek_7.1.2      scales_0.3.0     
+[31] truncnorm_1.0-7  </code></pre>
+</div>
+
+
+<!-- some extra javascript for older browsers -->
+<script type="text/javascript" src="libs/polyfill.js"></script>
+
+<script>
+
+// manage active state of menu based on current page
+$(document).ready(function () {
+
+    // active menu
+    href = window.location.pathname
+    href = href.substr(href.lastIndexOf('/') + 1)
+    $('a[href="' + href + '"]').parent().addClass('active');
+
+    // manage active menu header
+    if (href.startsWith('authoring_'))
+      $('a[href="' + 'authoring' + '"]').parent().addClass('active');
+    else if (href.endsWith('_format.html'))
+      $('a[href="' + 'formats' + '"]').parent().addClass('active');
+    else if (href.startsWith('developer_'))
+      $('a[href="' + 'developer' + '"]').parent().addClass('active');
+
+});
+
+</script>
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
