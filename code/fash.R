@@ -1,7 +1,7 @@
 library(ashr)
 library(truncdist)
 
-EMest_logF = function(logfhat,df1,df2,g,prior,null.comp=1,nullcheck=TRUE,control=list()){ 
+EMest_logF = function(logfhat,df1,df2,g,prior,optmethod,null.comp=1,nullcheck=TRUE,control=list()){ 
   control.default=list(K = 1, method=3, square=TRUE, step.min0=1, step.max0=1, mstep=4, kr=1, objfn.inc=1,tol=1.e-07, maxiter=5000, trace=FALSE)
   namc=names(control)
   if (!all(namc %in% names(control.default))) 
@@ -17,8 +17,12 @@ EMest_logF = function(logfhat,df1,df2,g,prior,null.comp=1,nullcheck=TRUE,control
   
   matrix_lik = t(compdens_conv_logf(g,logfhat,df1,df2))
   
-  #EMfit = mixEM(matrix_lik,prior,pi.init,control=controlinput)
-  EMfit = mixIP(matrix_lik,prior,pi.init,control=controlinput)
+  if (optmethod=="mixIP"){
+    EMfit = mixIP(matrix_lik,prior,pi.init,control=controlinput)
+  }else if (optmethod=="mixEM"){
+    EMfit = mixEM(matrix_lik,prior,pi.init,control=controlinput)
+  }
+  
   if(!EMfit$converged & controlinput$maxiter>0){
     warning("EM algorithm in function mixEM failed to converge. Results may be unreliable. Try increasing maxiter and rerunning.")
   }
@@ -66,7 +70,7 @@ penloglik = function(pi, matrix_lik, prior){
 compdens_conv_logf= function(m,x,v1,v2,FUN="+"){
   if(FUN!="+") stop("Error; compdens_conv not implemented for uniform with FUN!=+")
   compdens = t(pf(exp(outer(x,m$a,FUN="-")),df1=v1,df2=v2)-pf(exp(outer(x,m$b,FUN="-")),df1=v1,df2=v2))/(m$b-m$a)
-  compdens[m$a==m$b,] = t(df(exp(outer(x,m$a,FUN="-")),df1=v1,df2=v2))[m$a==m$b,]
+  compdens[m$a==m$b,] = t(df(exp(outer(x,m$a,FUN="-")),df1=v1,df2=v2)*exp(outer(x,m$a,FUN="-")))[m$a==m$b,]
   return(compdens)
 }
 
@@ -124,7 +128,7 @@ postmean_f = function(m,logfhat,v1,v2){
 comp_postmean_f = function(m,logfhat,v1,v2){
   alpha = exp(outer(-logfhat, m$a,FUN="+"))
   beta = exp(outer(-logfhat, m$b, FUN="+"))   
-  tmp = matrix(my_etruncf_vec(cbind(c(alpha),c(beta)),v2,v1),
+  tmp = matrix(my_etruncf_vec(cbind(c(alpha),c(beta)),v2,v1), # here reverse v1 and v2!
                nrow=length(logfhat))
   tmp = exp(logfhat)*tmp
   
@@ -183,11 +187,14 @@ etruncf = function(df1,df2,a,b){
     }else if (pf(a,df1,df2)<1e-5 & pf(b,df1,df2)>(1-1e-5)){
       return(df2/(df2-2)) # return the mean of un-truncated F distribution
     }else{
-      if(b>thresq$high){b = thresq$high}
-      if(a<thresq$low){a = thresq$low}
-      n = try(integrate(etruncf_num, lower=a, upper=b, df1=df1,df2=df2,a=a,b=b)$value)
-      d = try(integrate(etruncf_denom, lower=a, upper=b, df1=df1,df2=df2,a=a,b=b)$value)
-      return(n/d)
+      for (j in seq(10,5,by=-1)){
+        if(b > qf(1-10^(-j),df1,df2)){b = qf(1-10^(-j),df1,df2)}
+        if(a < qf(10^(-j),df1,df2)){a = qf(10^(-j),df1,df2)}
+        n = try(integrate(etruncf_num,lower=a,upper=b,df1=df1,df2=df2,a=a,b=b)$value,silent=TRUE)
+        d = try(integrate(etruncf_denom,lower=a,upper=b,df1=df1,df2=df2,a=a,b=b)$value,silent=TRUE)
+        
+        if(class(n)!="try-error" & class(d)!="try-error"){return(n/d)}
+      }  
     }
   }else{
     return(n/d)
@@ -326,16 +333,17 @@ initpi = function(k,n,null.comp,randomstart){
 
 fash = function(fhat, df1, df2,
                 method = c("fdr","shrink"),
-                pointmass=TRUE,
-                oneside=FALSE,
-                nullcheck=TRUE,
-                prior=c("nullbiased","uniform"),
-                nullweight=10,
-                randomstart=FALSE,
-                mixsd=NULL,
-                g=NULL,
-                gridmult=2,
-                control=list()){
+                pointmass = TRUE,
+                oneside = TRUE,
+                optmethod = c("mixIP","mixEM"),
+                nullcheck = TRUE,
+                prior = c("nullbiased","uniform"),
+                nullweight = 10,
+                randomstart = FALSE,
+                mixsd = NULL,
+                g = NULL,
+                gridmult = 2,
+                control = list()){
   
   
   if(!missing(method)){
@@ -365,6 +373,18 @@ fash = function(fhat, df1, df2,
         warning("Specification of pointmass overrides default for method fdr")
       }
     }  
+  }
+  
+  if(missing(optmethod)){
+    if(require(REBayes,quietly=TRUE)){ #check whether REBayes package is present
+      optmethod = "mixIP"
+    } else{  #If REBayes package missing
+      message("Due to absence of package REBayes, switching to EM algorithm")
+      optmethod = "mixEM" #fallback if neither Rcpp or REBayes are installed
+      message("Using vanilla EM; for faster performance install REBayes (preferred) or Rcpp")  
+    }
+  } else { #if optmethod specified
+    optmethod = match.arg(optmethod)
   }
   
   if(!is.numeric(prior)){  prior = match.arg(prior)  } 
@@ -413,7 +433,7 @@ fash = function(fhat, df1, df2,
   
   
   
-  pi.fit = EMest_logF(logfhat,df1,df2,g,prior,null.comp=null.comp,nullcheck=nullcheck,
+  pi.fit = EMest_logF(logfhat,df1,df2,g,prior,optmethod, null.comp=null.comp,nullcheck=nullcheck,
                       control=controlinput)
   
   # ZeroProb/NegProb of log(f)!
