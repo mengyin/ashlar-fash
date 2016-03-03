@@ -1,0 +1,180 @@
+---
+title: "An example of using fash to reduce estimation MSE on simulated F-stats"
+output: html_document
+---
+**Last updated:** `r Sys.Date()`
+
+**Code version:** `r system("git log -1 --format='%H'", intern = TRUE)`
+
+```{r chunk-options, include=FALSE}
+source("chunk-options.R")
+```
+
+
+We simulate F-statistics from the following model:
+\begin{align}
+\hat{F}_g &= \alpha_g \times F(df_1, df_2), \\
+\log(\alpha_g) &\sim g(\cdot),
+\end{align}
+where $g(\cdot)$ is an non-negative unimodal prior for $\log(\alpha_g)$ with mode at 0: $g=\pi_0 \delta_0 + \pi_1 U(0, a)$.
+
+We are interested in estimating parameters $\alpha_g$. In the linear regression model we have $\alpha_g=1+C\frac{\sigma_g^2}{s_g^2}$ where $\sigma^2$ is the variance of treatment effects and $s^2$ is the variance of errors. So $\alpha_g \geq 1$ ($\alpha_g=1$ iff $\sigma^2=0$) and that is why we let $g$ be non-negative.
+
+```{r}
+source('/Volumes/PERSONAL/MS/fash/fash.R')
+
+library(qvalue)
+
+# N: # of genes
+# Nnull: # of nulls
+# altsd: alternative prior component is U(-a,a) or U(0,a)
+# oneside: flag, whether prior is positive (U(0,a)) or can be negative (U(-a,a))
+sim_f = function(N,Nnull,df1,df2,altsd,oneside=TRUE){
+  null = c(rep(1,Nnull),rep(0,N-Nnull))
+  logalpha = rep(0,N)
+  if (Nnull<N){
+    if (oneside==TRUE){
+      logalpha[(Nnull+1):N] = runif(N-Nnull,0,altsd)
+    }else{
+      logalpha[(Nnull+1):N] = runif(N-Nnull,-altsd,altsd)
+    } 
+  } 
+  
+  alpha = exp(logalpha)
+  #Fhat = alpha*rf(N,df1=df1,df2=df2)
+  logfhat = logalpha+log(rf(N,df1,df2))
+  Fhat = exp(logfhat)
+  return(list(Fhat=Fhat, logfhat=logfhat,
+              logalpha=logalpha, null=null,
+              df1=df1, df2=df2))
+}
+```
+
+## A moderate df scenario (df1=10, df2=10)
+```{r}
+set.seed(999)
+
+# oneside
+data = sim_f(N=10000,Nnull=8000,df1=10,df2=10,altsd=4,oneside=TRUE)
+test = fash(data$Fhat, df1=data$df1, df2=data$df2, 
+                    oneside=TRUE, mixsd=4)
+test$fitted.g
+
+Fpvalue = 1-pf(data$Fhat,data$df1,data$df2)
+qval.f = qvalue(Fpvalue)$qval
+```
+
+Compare the MSE's: fash gives much lower MSE (in estimating "\log(\alpha_g)").
+```{r}
+# MSE of F-test
+mean((data$logalpha-log(data$Fhat))^2)
+
+# MSE of fash
+mean((data$logalpha-test$PosteriorMean.logf)^2)
+```
+
+Compare the FDR's of fash and raw F-test:
+
+* Ranking of genes: almost same.
+* F-test sometimes overestimates FDR, while fash can precisely estimate FDR.
+
+```{r, echo=FALSE}
+ng = 2000
+plot((cumsum(data$null[order(test$qvalue)])/(1:length(test$qvalue)))[10:ng],
+     type="l",xlab="# of top ranked genes",ylab="FDR",main="False discovery proportion (one-sided test)")
+lines((cumsum(data$null[order(qval.f)])/(1:length(qval.f)))[10:ng],col=2)
+legend("topleft",lty=1,col=c(1,2),legend=c("fash","F-test"))
+
+plot((cumsum(data$null[order(test$qvalue)])/(1:length(test$qvalue))),
+     sort(test$qvalue), xlab="true FDR", ylab="estimated FDR",main="fash")
+abline(0,1)
+
+plot((cumsum(data$null[order(qval.f)])/(1:length(qval.f))),
+     sort(qval.f), xlab="true FDR", ylab="estimated FDR",main="F-test")
+abline(0,1)
+```
+
+## A unbalanced df scenario (df1=5, df2=30)
+```{r}
+# oneside
+data = sim_f(N=10000,Nnull=8000,df1=5,df2=30,altsd=4,oneside=TRUE)
+test = fash(data$Fhat, df1=data$df1, df2=data$df2, 
+                    oneside=TRUE, mixsd=4)
+test$fitted.g
+
+Fpvalue = 1-pf(data$Fhat,data$df1,data$df2)
+qval.f = qvalue(Fpvalue)$qval
+```
+
+Compare the MSE's: fash gives lower MSE (in estimating "$\log(\alpha_g)$").
+```{r}
+# MSE of F-test
+mean((data$logalpha-log(data$Fhat))^2)
+
+# MSE of fash
+mean((data$logalpha-test$PosteriorMean.logf)^2)
+```
+
+Compare the FDR's of fash and raw F-test: F-test sometimes slightly overestimates FDR, but fash doesn't.
+
+```{r, echo=FALSE}
+ng = 2000
+plot((cumsum(data$null[order(test$qvalue)])/(1:length(test$qvalue)))[10:ng],
+     type="l",xlab="# of top ranked genes",ylab="FDR",main="False discovery proportion (one-sided test)")
+lines((cumsum(data$null[order(qval.f)])/(1:length(qval.f)))[10:ng],col=2)
+legend("topleft",lty=1,col=c(1,2),legend=c("fash","F-test"))
+
+plot((cumsum(data$null[order(test$qvalue)])/(1:length(test$qvalue))),
+     sort(test$qvalue), xlab="true FDR", ylab="estimated FDR",main="fash")
+abline(0,1)
+
+plot((cumsum(data$null[order(qval.f)])/(1:length(qval.f))),
+     sort(qval.f), xlab="true FDR", ylab="estimated FDR",main="F-test")
+abline(0,1)
+```
+
+## A large df scenario (df1=50, df2=50)
+```{r}
+# oneside
+data = sim_f(N=10000,Nnull=8000,df1=50,df2=50,altsd=4,oneside=TRUE)
+test = fash(data$Fhat, df1=data$df1, df2=data$df2, 
+                    oneside=TRUE, mixsd=4)
+test$fitted.g
+
+Fpvalue = 1-pf(data$Fhat,data$df1,data$df2)
+qval.f = qvalue(Fpvalue)$qval
+```
+
+Compare the MSE's: fash gives lower MSE (in estimating "$\log(\alpha_g)$").
+```{r}
+# MSE of F-test
+mean((data$logalpha-log(data$Fhat))^2)
+
+# MSE of fash
+mean((data$logalpha-test$PosteriorMean.logf)^2)
+```
+
+Compare the FDR's of fash and raw F-test: almost same (which makes sense since the sample size is already quite large).
+
+```{r, echo=FALSE}
+ng = 2000
+plot((cumsum(data$null[order(test$qvalue)])/(1:length(test$qvalue)))[10:ng],
+     type="l",xlab="# of top ranked genes",ylab="FDR",main="False discovery proportion (one-sided test)")
+lines((cumsum(data$null[order(qval.f)])/(1:length(qval.f)))[10:ng],col=2)
+legend("topleft",lty=1,col=c(1,2),legend=c("fash","F-test"))
+
+plot((cumsum(data$null[order(test$qvalue)])/(1:length(test$qvalue))),
+     sort(test$qvalue), xlab="true FDR", ylab="estimated FDR",main="fash")
+abline(0,1)
+
+plot((cumsum(data$null[order(qval.f)])/(1:length(qval.f))),
+     sort(qval.f), xlab="true FDR", ylab="estimated FDR",main="F-test")
+abline(0,1)
+```
+
+
+## Session information
+
+```{r info}
+sessionInfo()
+```
