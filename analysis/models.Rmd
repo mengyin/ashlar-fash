@@ -1,0 +1,42 @@
+---
+title: "FASH Models"
+output: pdf_document
+---
+
+## Models
+Suppose we have a bunch of F-statistics 
+\[\hat{F}_g=\alpha_g \times F_g, \quad ie \quad \log(\hat{F}_g)=log(\alpha_g)+\log(F_g)\]
+where $F_g$ is a F-distributed random variable with degrees of freedom $df_1, df_2$. We want to estimate $\alpha_g$ by combining information across F-statistics.
+
+Suppose $\alpha_g$'s are exchangeable, and $\log(\alpha_g)$'s are generated from a unimodel prior $g(\cdot)$ with unimode at 0 (since in ANOVA $\alpha_g=1$ under the null, and we assume many genes are nulls). We use a mixture uniform distribution to approximate this prior:
+
+\[g(\cdot)=\pi_0\delta_0+\sum_{k=1}^K \pi_k Unif(0,a_k),\]
+if $\log(\alpha)$'s must be non-negative, or 
+
+\[g(\cdot)=\pi_0\delta_0+\sum_{k=1}^K \pi_k Unif(-a_k,a_k),\]
+if $\log(\alpha)$'s can be either positive or negative.
+
+## Posterior distribution
+We use the posterior mean of $\alpha$ (or $\log(\alpha)$) as a shrinkage estimator.
+
+The posterior distribution of $\log(\alpha)$ is given by
+\[ \log(\alpha)|(\hat{F}_1,...,\hat{F}_g) \sim \log(\hat{F}_g)+ \sum_{k=0}^K \tilde{\pi}_k TruncLogF(a_k-\log(\hat{F}_g), b_k-\log(\hat{F}_g), df_2, df_1),\]
+where $TruncLogF(a,b,v_1,v_2)$ is the truncated log-F distribution with degrees of freedom $(v_1,v_2)$ truncated on $(a,b)$, and $\tilde{\pi}_k$'s are the posterior mixture proportions. So the posterior $\log(\alpha)$ equals to a constant $\log(\hat{F}_g)$ plus a mixture truncated log-F random variable. 
+
+The posterior distribution of $\alpha$ is hence given by $\hat{F}_g$ times a mixture truncated F-distribution. 
+
+## Some intuition about why $E(\alpha|\hat{F})$ can be higher than $\hat{F}$.
+Since we have 
+\[\log(\hat{F}_g)=\log(\alpha_g)+\log(F_g),\]
+our goal is similat to "devolution": estimate $\log(\alpha)$, given $\hat{F}$ and knowing the distribution of $\log(F)$ (log-F distribution with df1 & df2). 
+
+Note that log-F distribution can be pretty skewed, e.g log-F(1,198) distribution: 
+```{r}
+hist(log(rf(100000,df1=1,df2=198)), 50)
+```
+
+From the plot we know that $\log(F)$ is often negative, and
+\[\log(\hat{F})=\log(\alpha)+\log(F),\]
+so it makes sense that sometimes $\log(\alpha)$ is higher than $\log(\hat{F})$, ie $\alpha$ is higher than the F-statistics. 
+
+

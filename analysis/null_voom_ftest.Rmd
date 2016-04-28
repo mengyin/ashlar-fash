@@ -1,0 +1,204 @@
+---
+title: "Compare voom+limma and voom+limma+fash on pure null RNA-Seq data"
+output: html_document
+---
+**Last updated:** `r Sys.Date()`
+
+**Code version:** `r system("git log -1 --format='%H'", intern = TRUE)`
+
+```{r chunk-options, include=FALSE}
+source("chunk-options.R")
+```
+
+Define functions to generate pure null RNA-Seq datasets (we use GTEx data).
+```{r}
+library(edgeR)
+library(limma)
+library(qvalue)
+source("../code/fash.R")
+
+datamaker = function(args){  
+  rawdata = read.table("/Volumes/PERSONAL/MS/gtex/tissues/Muscle-Skeletal.txt",header=TRUE)
+  
+  # randomly choose samples for each gene
+  counts = selectsample(rawdata, args$nsamp*args$ngroup, args$breaksample)
+  rm("rawdata")
+
+  # Remove genes without any reads
+  counts = counts[apply(counts,1,sum)>0,]
+  
+  # Take the top Ngene high-expressed genes
+  counts = counts[sort(order(rowSums(counts),decreasing=TRUE)[1:args$ngene]),]
+  
+  condition = factor(rep(1:args$ngroup,each=args$nsamp))
+  
+  # Voom transformation + limma
+  voomlim = voom_transform(counts, condition)
+  
+  # f-test
+  ftest = varcomp_voom(voomlim$v, condition)
+  
+  # meta data
+  meta = list(args=args)
+  
+  # input data
+  input = list(counts=counts, condition=condition, 
+               v=voomlim$v, avelogcpm=voomlim$avelogcpm, 
+               fstats.limma=voomlim$fstats, pve.limma=voomlim$pve, pvalue.limma=voomlim$pvalue,
+               df1.limma=args$ngroup-1, df2.limma=voomlim$lim$df.total[1],
+               fstats.ftest=ftest$fstats, pve.ftest=ftest$pve)  
+  data = list(meta=meta,input=input)
+  return(data)
+}
+
+# Voom transformation
+voom_transform = function(counts, condition, W=NULL){
+  dgecounts = calcNormFactors(DGEList(counts=counts,group=condition))
+  
+  if (is.null(W)){
+    design = model.matrix(~condition)
+  }else{
+    design = model.matrix(~condition+W)
+  }
+  
+  v = voom(dgecounts,design,plot=FALSE)
+  lim = lmFit(v)
+  lim = eBayes(lim[,-1])
+  pve = pve_ftest(length(condition)/length(unique(condition)), 
+                  lim$s2.post*lim$F, lim$s2.post)
+  
+  dgecounts = estimateDisp(dgecounts, design, robust=TRUE)
+  avelogcpm = dgecounts$AveLogCPM
+  
+  return(list(v=v, lim=lim, avelogcpm=avelogcpm, 
+              fstats=lim$F, pvalue=lim$F.p.value, pve=pve))
+}
+
+varcomp_voom = function(v, condition){
+  combo = cbind(v$E,v$weights)
+  tmp = apply(combo,1,voom_ftest,condition=condition)
+  MST=tmp[2,]
+  MSE=tmp[3,]
+  pve = pve_ftest(length(condition)/length(unique(condition)), MST, MSE)
+  return(list(fstats=tmp[1,], MST=MST, MSE=MSE, pve=pve))
+}
+
+voom_ftest = function(ynweights,condition){
+  y = ynweights[1:(length(ynweights)/2)]
+  weights = ynweights[(length(ynweights)/2+1):length(ynweights)]
+  fit = lm(y~condition, weights=weights)
+  MST = anova(fit)$M[1]
+  MSE = anova(fit)$M[length(anova(fit)$M)]
+  fstat = anova(fit)$F[1]
+  return(c(fstat,MST,MSE))
+}
+
+# randomly subsample data for each gene
+# gene: a vector of reads for one gene
+# nsamp: # of samples wanted
+sampleingene = function(gene, nsamp){
+  sample = sample(length(gene),nsamp)
+  return(c(gene[sample]))
+}
+
+# Randomly select samples
+# counts: full count matrix
+# nsamp: # of samples wanted
+# breaksample: flag, if select different samples for each gene
+selectsample = function(counts, nsamp, breaksample){
+  if (breaksample==FALSE){
+    subsample = sample(1:dim(counts)[2],nsamp)
+    counts = counts[,subsample]
+  }else{
+    counts = t(apply(counts, 1, sampleingene, nsamp=nsamp))
+  }
+  return(counts)
+}
+
+pve_ftest = function(nsamp,MST,MSE){
+  sigma.c2.hat = pmax(0,(MST-MSE)/nsamp)
+  sigma.e2.hat = MSE
+  return(sigma.c2.hat/(sigma.c2.hat+sigma.e2.hat))
+}
+
+pve_plugin = function(nsamp,fashobj){
+  (exp(fashobj$PosteriorMean.logf)-1)/(exp(fashobj$PosteriorMean.logf)-1+nsamp)
+}
+
+```
+
+Sample a pure null dataset (independent genes): for each gene, randomly choose 250 samples from same condition (tissue). Separate them into 5 groups with 50 samples each group.  
+```{r}
+set.seed(1234)
+# Generate a pure null dataset
+args = list(ngene=10000, ngroup=5, nsamp=50, breaksample=TRUE)
+test = datamaker(args)
+
+# fash
+test.fash = fash(test$input$fstats.limma, test$input$df1.limma, test$input$df2.limma, oneside=TRUE)
+pve.fash = pve_plugin(args$nsamp, test.fash)
+
+# p-values of voom+limma's moderated F-test
+hist(test$input$pvalue,30, xlab="voom+limma p-value", main="Histogram of p-value")
+
+# Number of genes called significant
+sum(qvalue(test$input$pvalue.limma)$qval<=0.05) # voom+limma
+sum(test.fash$qval<=0.05) # fash
+
+# estimated PVE's
+plot(test$input$avelogcpm, test$input$pve.ftest, ylim=c(0,0.2),
+     xlab="average log-cpm", ylab="estimated pve", main="ngroup=5, nsamp=50")
+points(test$input$avelogcpm, test$input$pve.limma, col=2)
+points(test$input$avelogcpm, pve.fash, col=3)
+legend("topright",pch=1, col=c(1,2,3),legend=c("voom+ftest","voom+limma","voom+limma+fash"))
+
+# loess curve of estimated PVE's
+scatter.smooth(test$input$avelogcpm, test$input$pve.ftest, col="blue",ylab="pve.ftest",ylim=c(0,0.2),
+               main="loess curve of the estimated PVE's")
+scatter.smooth(test$input$avelogcpm, test$input$pve.limma, col="blue", ylab="pve.limma",ylim=c(0,0.2),
+               main="loess curve of the estimated PVE's")
+scatter.smooth(test$input$avelogcpm, pve.fash,col="blue",ylab="pve.fash",ylim=c(0,0.2),
+               main="loess curve of the estimated PVE's")
+```
+
+
+Try a small sample size dataset: 3 groups, 2 samples in each group.  
+```{r}
+# Generate a pure null dataset
+args = list(ngene=10000, ngroup=3, nsamp=2, breaksample=TRUE)
+test = datamaker(args)
+
+# fash
+test.fash = fash(test$input$fstats.limma, test$input$df1.limma, test$input$df2.limma, oneside=TRUE)
+pve.fash = pve_plugin(args$nsamp, test.fash)
+
+# p-values of voom+limma's moderated F-test
+hist(test$input$pvalue,30, xlab="voom+limma p-value",main="Histogram of p-value")
+
+# Number of genes called significant
+sum(qvalue(test$input$pvalue.limma)$qval<=0.05) # voom+limma
+sum(test.fash$qval<=0.05) # fash
+
+# estimated PVE's
+plot(test$input$avelogcpm, test$input$pve.ftest, ylim=c(0,1),
+     xlab="average log-cpm", ylab="estimated pve", main="ngroup=3, nsamp=2")
+points(test$input$avelogcpm, test$input$pve.limma, col=2)
+points(test$input$avelogcpm, pve.fash, col=3)
+legend("topright",pch=1, col=c(1,2,3),legend=c("voom+ftest","voom+limma","voom+limma+fash"))
+
+# loess curve of estimated PVE's
+scatter.smooth(test$input$avelogcpm, test$input$pve.ftest, col="blue",ylab="pve.ftest",ylim=c(0,1),
+               main="loess curve of the estimated PVE's")
+scatter.smooth(test$input$avelogcpm, test$input$pve.limma, col="blue", ylab="pve.limma",ylim=c(0,1),
+               main="loess curve of the estimated PVE's")
+scatter.smooth(test$input$avelogcpm, pve.fash,col="blue",ylab="pve.fash",ylim=c(0,1),
+               main="loess curve of the estimated PVE's")
+```
+
+
+
+## Session information
+
+```{r info}
+sessionInfo()
+```

@@ -1,0 +1,102 @@
+---
+title: "DSC: Compare fash, ftest and limma on simulated Gaussian data"
+output: html_document
+---
+**Last updated:** `r Sys.Date()`
+
+**Code version:** `r system("git log -1 --format='%H'", intern = TRUE)`
+
+```{r chunk-options, include=FALSE}
+source("chunk-options.R")
+```
+
+Simulate data from the Gaussian random effect model 
+\[Y_{gi}=\mu_{gi}+\beta_{g,c(i)}+e_{gi}\]
+where $\beta_{g,c}~N(0,\sigma_g^2)$, $e_{gi}~N(0,s_g^2)$.
+
+Then we have F-statistics $F_g=\frac{MST_g}{MSE_g}=(1+N\sigma_g^2/s_g^2)\cdot F(df_1,df_2)$. Suppose $\alpha:=(1+N\sigma_g^2/s_g^2)$ and $\log(\alpha)$ comes from an non-negative unimodal prior (null: $\sigma=0 \Leftrightarrow \log(\alpha)=0$, alternative: non-negative unimodal prior with mode at 0).
+
+Prior scenarios: spiky, near_normal, flat_top, big-normal, "bimodal" (actually not bimodal, unimodal at non-zero). 
+
+Plot DSC results:
+```{r,echo=FALSE,message=FALSE,out.width='\\textwidth',fig.height=10,fig.width=10}
+library(ggplot2)
+library(tidyr)
+load("../code/dsc-fash/res.Rdata")
+res = separate(res,scenario,c("scenario","nsamp","ngroup"),",")
+res$nsamp = factor(res$nsamp, levels=c("nsamp=2","nsamp=10","nsamp=50"))
+res$ngroup = factor(res$ngroup, levels=c("ngroup=3","ngroup=5","ngroup=10"))
+res$scenario = factor(res$scenario, levels=c("spiky","near_normal","flat_top","big-normal"))
+
+ggplot(res, aes(pi0,pi0.est,colour=method))+
+  facet_grid(ngroup+nsamp~scenario) + geom_point(shape=1) +xlim(0,1) +ylim(0,1) + 
+  xlab("true pi0") +ylab("estimated pi0") +geom_abline(slope=1,intercept=0,color=1)
+
+ggplot(res, aes(pi0,FDP_005,colour=method)) + 
+  facet_grid(ngroup+nsamp~scenario) + geom_point(shape=1) +xlim(0,1) +ylim(0,0.2) + 
+  xlab("true pi0") +ylab("false discovery proportion when q=0.05") +geom_abline(slope=0,intercept=0.05,color=1)
+
+ggplot(res, aes(pi0,DP_005,colour=method)) + 
+  facet_grid(ngroup+nsamp~scenario) + geom_point(shape=1) +xlim(0,1) +ylim(0,1) + 
+  xlab("true pi0") +ylab("discovery proportion when q=0.05") +geom_abline(slope=-1,intercept=1,color=1)
+
+ggplot(res, aes(pi0,rmse.pve,colour=method)) + 
+  facet_grid(ngroup+nsamp~scenario) + geom_point(shape=1) +xlim(0,1)+
+  xlab("true pi0") +ylab("rmse.pve")
+
+#####
+library(dplyr)
+newres = res
+newres = newres[newres$method=='ftest',]
+newres = newres[c(2:5,12)]
+names(newres)[5] = c('rmse.pve_baseline')
+test = left_join(res,newres,by=c('seed','scenario','ngroup','nsamp'))
+test$rmse.pve_rel = test$rmse.pve/test$rmse.pve_baseline # RRMSE_prec
+
+ggplot(test, aes(pi0,rmse.pve_rel,colour=method)) + 
+  facet_grid(ngroup+nsamp~scenario) + geom_point(shape=1) +xlim(0,1)+
+  xlab("true pi0") +ylab("relative rmse.pve")
+
+```
+
+Check an example where fash hardly improves PVE estimation accuracy compared to the baseline F-test:
+```{r}
+test[test[,1]=="big-normal,nsamp=2,ngroup=3"&test$method=="fash"&test$seed==15,c(1:2,7,19)]
+```
+
+Check fash's fitted prior (true prior: big-normal). 
+```{r}
+# Density of normal mixture
+normalmix_dens = function(distn,xgrid){
+  k = length(distn$pi)
+  dens = colSums(dnorm(outer(rep(1,k),xgrid),distn$mu,distn$sd)*distn$pi)
+  return(dens)
+}
+
+# Density of uniform mixture
+unimix_dens = function(distn,xgrid){
+  k = length(distn$pi)
+  dens = colSums(dunif(outer(rep(1,k),xgrid),distn$a,distn$b)*distn$pi)
+  return(dens)
+}
+
+
+meta=readRDS("../code/dsc-fash/dsc-fash-files/meta/big-normal,nsamp=2,ngroup=3/default_meta/meta.15.rds")
+out.fash=readRDS("../code/dsc-fash/dsc-fash-files/output/big-normal,nsamp=2,ngroup=3/fash/fash_output/output.15.rds")
+
+x = seq(-10,10,by=0.05)
+fitted.alt = list(pi=out.fash$fit$fitted.g$pi[-1],a=out.fash$fit$fitted.g$a[-1],
+                  b=out.fash$fit$fitted.g$b[-1])
+plot(x[x>0],(normalmix_dens(meta$args$logaargs,x)[x>0])*2,type="l",ylim=c(0,0.5),xlim=c(0,10),
+     ylab="prior density",xlab="x")
+lines(x[x>0],unimix_dens(fitted.alt,x[x>0]),col=2)
+legend("topright",lty=1,col=c(1,2),legend=c("true","fitted"))
+
+```
+
+
+## Session information
+
+```{r info}
+sessionInfo()
+```

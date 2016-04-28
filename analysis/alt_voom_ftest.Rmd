@@ -1,0 +1,227 @@
+---
+title: "Compare varaince decomposition models on voom transformed RNA-seq data"
+output: html_document
+---
+**Last updated:** `r Sys.Date()`
+
+**Code version:** `r system("git log -1 --format='%H'", intern = TRUE)`
+
+```{r chunk-options, include=FALSE}
+source("chunk-options.R")
+```
+
+Previously we used fash to analyze the variance decomposition for a simple random effect model
+\[Y_{i}=\mu+\beta_{c(i)}+e_i,\]
+where $\beta_{c(i)}\sim N(0,\sigma^2)$ and $e_i\sim N(0,s^2)$, and we can estimate the PVE ($\sigma^2/(\sigma^2+s^2)$).
+
+However, for RNA-seq data, after voom transformation we have a weighted linear regression model for each gene $g$ (suppose $N$ is number of samples in each group and $K$ is number of groups, so $Y_g$ is $NK$-vector and $\beta_g$ is $K$-vector): 
+\[Y_g=X\beta_g+W_g^{-1/2}e_g,\]
+where $X$ is the design matrix, $W_g$ is the diagonal weight matrix (weights inversly proportional to $Var(Y_g)$, and $e_g\sim N(0,s_g^2I_{NK \times NK})$). Note that $W_g$ depends on count level, but $s_g^2$ doesn't! $s_g^2$ is the de-trended error variance. 
+
+Now our goal is to model the random effect $X\beta_g$. A few possible ways (note: $\sigma^2$ doesn't depend on count level!):
+
+  * Model 1: $Y_g=\mu_g+X\beta_g+W_g^{-1/2}e_g$ and $\beta_g\sim N(0,\sigma_g^2 I_{K \times K})$.
+  However this model's ANOVA F-statistic doesn't have close form distribution! 
+
+  * Model 2: $Y_g=\mu_g+X\beta_g+W_g^{-1/2}e_g$ and $\beta_g\sim N(0,\sigma_g^2N(X^TW_gX)^{-1})$. In the balanced design model, this assumption means that $\beta_g$'s variance is inversely proportional to the average observation's weights within each group. So the ANOVA's F-statistic will follow the distribution (Johnson 2007) 
+  \[F_g\sim (1+N\sigma_g^2/s_g^2)F(K-1,NK-K).\]
+
+  * Model 3: $\tilde{Y}_g:=W_g^{1/2}Y_g=\tilde{\mu}_g+X\tilde{\beta_g}+e_g$ and $\tilde{\beta}_g\sim N(0,\sigma_g^2 I_{K \times K})$. However $\tilde{\beta}$ is different from $\beta$ and the interpretation changes!
+  
+We check whether Model 2's assumption is sensible on GTEx data.
+
+First define functions to generate RNA-Seq datasets (we use GTEx data). Here we use data from multiple tissues (conditions), and analyze the conditional effects using F-test, limma or fash (on voom-transformed data). 
+```{r}
+library(edgeR)
+library(limma)
+library(qvalue)
+source("../code/fash.R")
+
+datamaker = function(args){  
+  if (length(args$tissue)<args$ngroup){
+    stop("Not enough tissues!")
+  }
+  
+  rawdata = list()
+  for (i in 1:args$ngroup){
+    rawdata[[i]] = read.table(paste0("/Volumes/PERSONAL/MS/gtex/tissues/",
+                                     args$tissue[i],".txt"),header=TRUE)
+  }
+  
+  # randomly choose samples for each gene
+  counts = NULL
+  for (i in 1:args$ngroup){
+    counts = cbind(counts, selectsample(rawdata[[i]], args$nsamp, args$breaksample))
+  }
+  rm("rawdata")
+  counts = shufflegroup(counts, args$ngroup, args$nsamp, args$breaksample)
+
+  # Remove genes without any reads
+  counts = counts[apply(counts,1,sum)>0,]
+  
+  # Take the top Ngene high-expressed genes
+  counts = counts[sort(order(rowSums(counts),decreasing=TRUE)[1:args$ngene]),]
+  
+  condition = factor(rep(1:args$ngroup,each=args$nsamp))
+  
+  # Voom transformation + limma
+  voomlim = voom_transform(counts, condition)
+  
+  # f-test
+  ftest = varcomp_voom(voomlim$v, condition)
+  
+  # meta data
+  meta = list(args=args)
+  
+  # input data
+  input = list(counts=counts, condition=condition, 
+               v=voomlim$v, avelogcpm=voomlim$avelogcpm, 
+               fstats.limma=voomlim$fstats, pve.limma=voomlim$pve, pvalue.limma=voomlim$pvalue,
+               df1.limma=args$ngroup-1, df2.limma=voomlim$lim$df.total[1],
+               fstats.ftest=ftest$fstats, pve.ftest=ftest$pve)  
+  data = list(meta=meta,input=input)
+  return(data)
+}
+
+# Voom transformation
+voom_transform = function(counts, condition, W=NULL){
+  dgecounts = calcNormFactors(DGEList(counts=counts,group=condition))
+  
+  if (is.null(W)){
+    design = model.matrix(~condition)
+  }else{
+    design = model.matrix(~condition+W)
+  }
+  
+  v = voom(dgecounts,design,plot=FALSE)
+  lim = lmFit(v)
+  lim = eBayes(lim[,-1])
+  pve = pve_ftest(length(condition)/length(unique(condition)), 
+                  lim$s2.post*lim$F, lim$s2.post)
+  
+  dgecounts = estimateDisp(dgecounts, design, robust=TRUE)
+  avelogcpm = dgecounts$AveLogCPM
+  
+  return(list(v=v, lim=lim, avelogcpm=avelogcpm, 
+              fstats=lim$F, pvalue=lim$F.p.value, pve=pve))
+}
+
+varcomp_voom = function(v, condition){
+  combo = cbind(v$E,v$weights)
+  tmp = apply(combo,1,voom_ftest,condition=condition)
+  MST=tmp[2,]
+  MSE=tmp[3,]
+  pve = pve_ftest(length(condition)/length(unique(condition)), MST, MSE)
+  return(list(fstats=tmp[1,], MST=MST, MSE=MSE, pve=pve))
+}
+
+voom_ftest = function(ynweights,condition){
+  y = ynweights[1:(length(ynweights)/2)]
+  weights = ynweights[(length(ynweights)/2+1):length(ynweights)]
+  fit = lm(y~condition, weights=weights)
+  MST = anova(fit)$M[1]
+  MSE = anova(fit)$M[length(anova(fit)$M)]
+  fstat = anova(fit)$F[1]
+  return(c(fstat,MST,MSE))
+}
+
+# randomly subsample data for each gene
+# gene: a vector of reads for one gene
+# nsamp: # of samples wanted
+sampleingene = function(gene, nsamp){
+  sample = sample(length(gene),nsamp)
+  return(c(gene[sample]))
+}
+
+# Randomly select samples
+# counts: full count matrix
+# nsamp: # of samples wanted
+# breaksample: flag, if select different samples for each gene
+selectsample = function(counts, nsamp, breaksample){
+  if (breaksample==FALSE){
+    subsample = sample(1:dim(counts)[2],nsamp)
+    counts = counts[,subsample]
+  }else{
+    counts = t(apply(counts, 1, sampleingene, nsamp=nsamp))
+  }
+  return(counts)
+}
+
+# randomly shuffle the groups' order for each gene
+# to avoid the unequal library size issue
+shufflegroup = function(counts, ngroup, nsamp, breaksample){
+  if (breaksample==TRUE){
+    return(t(apply(counts, 1, shufflegroup_vec, ngroup=ngroup, nsamp=nsamp)))
+  }else{
+    return(counts)
+  }
+}
+
+shufflegroup_vec = function(gene, ngroup, nsamp){
+  idx = sample(ngroup,replace=FALSE)
+  idx = rep((idx-1)*nsamp,each=nsamp)+1:nsamp
+  return(gene[idx])
+}
+
+pve_ftest = function(nsamp,MST,MSE){
+  sigma.c2.hat = pmax(0,(MST-MSE)/nsamp)
+  sigma.e2.hat = MSE
+  return(sigma.c2.hat/(sigma.c2.hat+sigma.e2.hat))
+}
+
+pve_plugin = function(nsamp,fashobj){
+  (exp(fashobj$PosteriorMean.logf)-1)/(exp(fashobj$PosteriorMean.logf)-1+nsamp)
+}
+
+```
+
+Sample dataset (independent genes): for each gene, randomly choose 50 samples from each of the 10 tissues. We randomly shuffle the order of the 10 tissues for each gene, such that the library sizes of all samples are similar so we won't have the unequal library sizes issue.
+```{r}
+set.seed(1234)
+# Generate a pure null dataset
+args = list(tissue=c("Brain-Amygdala","Brain-Caudate(basalganglia)","Brain-CerebellarHemisphere",
+                     "Brain-Cerebellum","Brain-Cortex","Brain-FrontalCortex(BA9)",
+                     "Brain-Nucleusaccumbens(basalganglia)","Brain-Hippocampus","Brain-Hypothalamus",
+                     "Brain-Substantianigra"), 
+            ngene=10000, ngroup=10, nsamp=50, breaksample=TRUE)
+test = datamaker(args)
+```
+
+Since Model 2 assumes that $Var(\beta)=\sigma^2(X^TWX)^{-1}$, where $\sigma^2$'s are exchangeable across genes and do not depend on count levels. We plot the normalized effect sizes $\tilde{\beta}_g:=\beta_g/(X^TW_gX)^{-1/2}$ such that their variances are exchangeble. We see there are no obvious trend between the distribution of $sd(\tilde{\beta}_g)$ and the average log-cpm values if we remove the leverage points on the right. 
+```{r}
+# compute the normalizing factors (X'WX) for each gene
+scalew_vec = function(weights, condition){
+  return(t(apply(weights,1,scalew, model.matrix(~condition)[,-1])))
+}
+
+# X: design matrix, W: weights
+# return new weights: diagonal of (X'WX)^(-1)
+scalew = function(W, X){
+  diag(solve(t(X)%*%diag(W)%*%X))
+}
+
+# fit the regression coefficients beta
+lim = lmFit(test$input$v,model.matrix(~test$input$condition))
+
+# normalize beta by sqrt(X'WX)
+weights_beta = scalew_vec(test$input$v$weights,test$input$condition)
+coef_w = lim$coefficients[,-1]/sqrt(weights_beta) # no intercept
+
+# plot sd's of normalized beta against average log-cpm
+sd_coef_w = apply(coef_w, 1, sd)
+scatter.smooth(test$input$avelogcpm, sd_coef_w,col=2,
+               xlab="average log-cpm", ylab="sd(nomalized coef)")
+
+# remove some leverage points on the right
+scatter.smooth(test$input$avelogcpm[test$input$avelogcpm<8], sd_coef_w[test$input$avelogcpm<8],
+               col=2,xlab="average log-cpm", ylab="sd(nomalized coef)")
+```
+
+Reference:
+Johnson, Valen E. "Properties of Bayes factors based on test statistics." Scandinavian Journal of Statistics 35.2 (2008): 354-368.
+
+## Session information
+
+```{r info}
+sessionInfo()
+```

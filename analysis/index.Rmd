@@ -16,3 +16,7 @@ title: "Home"
 *  [Compare RNA-seq gene-wise variance decomposition via glm vs. voom using GTEx data](vd_glm_vs_voom.html)
 *  [A simulation example to compare variance decomposition by GLMM vs voom+ANOVA](voomr_simcounts.html)
 *  [An example of using fash to reduce estimation MSE on simulated F-stats](simfstat.html)
+*  [An example of comparison between different PVE estimators](comp_pve.html)
+*  [DSC: Compare fash, ftest and limma on simulated Gaussian data](dsc_fash.html)
+*  [Compare varaince decomposition models on voom transformed RNA-seq data](alt_voom_ftest.html)
+*  [Compare voom+limma and voom+limma+fash on pure null RNA-Seq data](null_voom_ftest.html)

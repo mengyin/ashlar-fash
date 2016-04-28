@@ -1,0 +1,233 @@
+---
+title: "An example of comparison between different PVE estimators"
+output: html_document
+---
+In the model 
+\[Y_{gi}= \mu_g+\beta_{g,c(i)}+e_{gi}\]
+where $\beta \sim N(0,\sigma^2)$ and $e\sim N(0,s^2)$, we want to estimate
+\[PVE:=\frac{\sigma^2}{s^2+\sigma^2}.\]
+
+1. Naive estimate for PVE based on MST and MSE ($N$: sample size in each group):
+\[\hat{PVE}_{naive}=\frac{MST-MSE}{MST-MSE+N\times MSE}.\]
+
+Since $Fstat = \frac{MST}{MSE}=(1+N\sigma^2/s^2)F(df1,df2)$, and suppose $\alpha:=(1+N\sigma^2/s^2)$,
+we have
+\[PVE:=f(\log(\alpha))=1-\frac{N}{exp(\log(\alpha))-1+N}.\]
+
+After obtaining the posterior distribution of $\log(\alpha)$ using fash, there are a few ways to estimate PVE:
+
+2. Empirical posterior mean of PVE: sample $\log(\alpha)$ from posterior, transform to $PVE$ and compute the empirical posterior mean of $PVE$.
+
+3. Use Taylor expansion to approximate the posterior mean $E(PVE|D)$: 
+\[f(\log(\alpha))\approx f(0)+f'(0)\log(\alpha) = \frac{1}{N}\log(\alpha),\]
+so $E(PVE|D)\approx \frac{1}{N} E(\log(\alpha)|D)$.
+
+4. Plugin $E(\log(\alpha)|D)$ into $f(\cdot)$: $\hat{PVE}_{plugin}=f(E(\log(\alpha)|D))$.
+
+
+```{r}
+# PVE from the raw MSTs & MSEs
+pve_ftest = function(nsamp,MST,MSE){
+  sigma.c2.hat = pmax(0,(MST-MSE)/nsamp)
+  sigma.e2.hat = MSE
+  return(sigma.c2.hat/(sigma.c2.hat+sigma.e2.hat))
+}
+
+# PVE = sigma^2/s^2
+# logalpha = (1+nsamp*sigma^2/s^2)
+# So: PVE = (exp(logalpha)-1)/(exp(logalpha)-1+nsamp)
+pve_plugin = function(nsamp,fashobj){
+  (exp(fashobj$PosteriorMean.logf)-1)/(exp(fashobj$PosteriorMean.logf)-1+nsamp)
+}
+
+# compute empirical posterior mean of PVE
+# sample logalpha from posterior distn
+# then transform them into PVEs
+pve_sim = function(nsamp,fashobj){
+  tmp = apply(cbind(c(fashobj$PosteriorTrunclogf_a),c(fashobj$PosteriorTrunclogf_b),
+                    rep(fashobj$logfhat,dim(fashobj$PosteriorTrunclogf_a)[2])),1,
+              pve_sim_each, df1=fashobj$PosteriorTrunclogf_df1, df2=fashobj$PosteriorTrunclogf_df2,
+              nsamp=nsamp)
+  tmp = matrix(tmp, nrow=dim(fashobj$PosteriorTrunclogf_a)[1])
+  colSums(fashobj$PosteriorPi*t(tmp))
+}
+
+# sample logalpha from posterior: truncated logF-distn with a,b,df1,df2 
+# PVE = (exp(logalpha)-1)/(exp(logalpha)-1+nsamp)
+# and compute monte carlo mean of PVE
+pve_sim_each = function(a_b_logfhat,df1,df2,logfhat,nsamp,nsim=10000){
+  a = a_b_logfhat[1]
+  b = a_b_logfhat[2]
+  logfhat = a_b_logfhat[3]
+  if(a==b){
+    return(a+logfhat)
+  }else{
+    logalpha.sim = log(rf(nsim,df1,df2))
+    logalpha.sim = logalpha.sim[logalpha.sim>=a & logalpha.sim<=b]+logfhat
+    if(length(logalpha.sim)>0){
+      pve.sim = (exp(logalpha.sim)-1)/(exp(logalpha.sim)-1+nsamp)
+    }else{
+      pve.sim = (exp((a+b)/2+logfhat)-1)/(exp((a+b)/2+logfhat)-1+nsamp)
+    }
+    return(mean(pve.sim))
+      
+#     # importance sampling
+#     # pve's range: (pve.a, pve.b)
+#     pve.a = 1-(nsamp/(exp(a+logfhat)-1+nsamp))
+#     pve.b = 1-(nsamp/(exp(b+logfhat)-1+nsamp))
+#     y = runif(nsim,pve.a,pve.b)
+#     w = (1-nsamp/(rf(nsim,df1,df2)*exp(logfhat)-1+nsamp))/dunif(y,pve.a,pve.b) 
+#     mean(w*y*(y>=pve.a & y<=pve.b))
+    
+  }
+}
+
+# Taylor approx: PVE:=f(logalpha)=(logalpha-1)/(logalpha-1+nsamp)
+# f(logalpha)\approx f(0)+f'(0)*logalpha = logalpha/nsamp
+# E(PVE)\approx E(logalpha)/nsamp
+pve_taylor = function(nsamp,fashobj){
+  (fashobj$PosteriorMean.logf)/nsamp
+}
+
+```
+
+Define functions to generate dataset:
+```{r}
+# simulate data Y_{gi}=\mu_{gi}+\beta_{g,c(i)}+e_{gi}
+# where \beta~N(0,sigma_g^2), e~N(0,s^2)
+# and log(alpha):=log(1+nsamp*sigma_g^2/s^2)
+# then Fstat~alpha*F(ngroup-1, nsamp*ngroup-ngroup)
+
+# ngene: # of genes
+# nsamp: # of samples for each group
+# ngroup: # of groups
+# mumean, musd: generate true mu's from N(logrmean, logrsd)
+datamaker = function(args){  
+  #sigma.e = rep(1,args$ngene)
+  if(is.null(args$errshape)){
+    args$errshape = 5
+  }
+  if(is.null(args$errrate)){
+    args$errrate = 5
+  }
+  sigma.e = sqrt(rgamma(args$ngene, args$errshape, args$errrate))
+  
+  # logalpha generated from normal mixture
+  loga = gen_normalmix(args$ngene, 
+                       args$logaargs$pi, args$logaargs$mu, args$logaargs$sd, 
+                       args$pi0)
+  logalpha = abs(loga$beta) # must be postive
+  null = loga$null
+  
+  # logalpha:=log((1+nsamp*sigma.c^2/sigma.e^2))
+  sigma.c = sqrt((exp(logalpha)-1)/args$nsamp*sigma.e^2)
+  
+  mu = rep(0,args$ngene)
+  beta = matrix(rep(rnorm(args$ngene*args$ngroup, 0, rep(sigma.c,each=args$ngroup)), each=args$nsamp), 
+                nrow=args$ngene, byrow=TRUE)
+  e = matrix(rnorm(args$ngene*args$ngroup*args$nsamp, 0, rep(sigma.e, each=args$ngroup*args$nsamp)), 
+             nrow=args$ngene, byrow=TRUE)
+  
+  Y = mu+beta+e
+  condition = factor(rep(1:args$ngroup,each=args$nsamp))
+  
+  ftests = apply(Y,1,get_fstat,condition=condition)
+  fstat = ftests[1,]
+  MST = ftests[2,]
+  MSE = ftests[3,]
+  
+  meta = list(pi0=loga$pi0, logalpha=logalpha, null=null, pve=sigma.c^2/(sigma.c^2+sigma.e^2),
+              logaprior=list(pi=args$logaargs$pi,mu=args$loagargs$mu,sd=args$loagargs$sd), 
+              args=args)
+  
+  input = list(Y=Y, condition=condition, fstat=fstat, MST=MST, MSE=MSE,
+               df1=args$ngroup-1,df2=(args$nsamp-1)*args$ngroup)
+  data = list(meta=meta,input=input)
+  return(data)
+}
+
+get_fstat = function(y,condition){
+  fit = lm(y~condition)
+  fstat = anova(fit)$F[1]
+  MST = anova(fit)$M[1]
+  MSE = anova(fit)$M[2]
+  return(c(fstat,MST,MSE))
+}
+
+# Generate beta from normal mixture prior
+gen_normalmix = function(ngene, pi, mu, sd, pi0){
+  if (pi0=="random"){
+    pi0 = runif(1,0,1) #generate the proportion of true nulls randomly
+  }
+  k = length(pi) # number of components
+  comp = sample(1:k,ngene,pi,replace=TRUE) #randomly draw a component
+  isnull = (runif(ngene,0,1) < pi0)
+  beta = ifelse(isnull, 0, rnorm(ngene,mu[comp],sd[comp]))
+  return(list(beta=beta, pi0=pi0, null=isnull))
+}
+```
+
+Simulate a dataset (nsamp=10, ngroup=10) and apply fash:
+```{r}
+source("../code/fash.R")
+set.seed(100)
+
+# alternative log(alpha)'s generated from near-normal distribution
+args=list(ngene=5000, nsamp=10, ngroup=10, pi0="random",
+          logaargs=list(pi=c(2/3,1/3),mu=c(0,0),sd=c(1,2)))
+
+# generate test dataset
+test = datamaker(args)
+
+# run fash
+test.fash = fash(test$input$fstat, test$input$df1, test$input$df2, oneside=TRUE)
+```
+
+Estimate PVE with the four methods and compare their accuracies: pve.plugin almost equals to pve.sim; pve.taylor performs worse. But all three estiamators based on fash give much lower MSEs than that of pve.naive.
+```{r}
+pve.naive = pve_ftest(test$meta$args$nsamp,test$input$MST,test$input$MSE)
+pve.plugin = pve_plugin(test$meta$args$nsamp,test.fash)
+pve.taylor = pve_taylor(test$meta$args$nsamp,test.fash)
+pve.sim = pve_sim(test$meta$args$nsamp,test.fash)
+
+mean((test$meta$pve-pve.naive)^2)
+mean((test$meta$pve-pve.plugin)^2)
+mean((test$meta$pve-pve.taylor)^2)
+mean((test$meta$pve-pve.sim)^2)
+
+plot(pve.plugin, pve.sim,xlab="estimated pve (plugin)",ylab="estimated pve (sim)")
+plot(pve.taylor, pve.sim,xlab="estimated pve (taylor)",ylab="estimated pve (sim)")
+
+plot(test$meta$pve,pve.sim,xlab="true pve",ylab="estimated pve (sim)")
+abline(0,1,col=2)
+```
+
+Try another dataset with smaller sample size: nsamp=2, ngroup=3.
+```{r}
+set.seed(100)
+
+args=list(ngene=5000, nsamp=2, ngroup=3, pi0="random",
+          logaargs=list(pi=c(2/3,1/3),mu=c(0,0),sd=c(1,2)))
+test = datamaker(args)
+test.fash = fash(test$input$fstat, test$input$df1, test$input$df2, oneside=TRUE)
+
+pve.naive = pve_ftest(test$meta$args$nsamp,test$input$MST,test$input$MSE)
+pve.plugin = pve_plugin(test$meta$args$nsamp,test.fash)
+pve.taylor = pve_taylor(test$meta$args$nsamp,test.fash)
+pve.sim = pve_sim(test$meta$args$nsamp,test.fash)
+
+mean((test$meta$pve-pve.naive)^2)
+mean((test$meta$pve-pve.plugin)^2)
+mean((test$meta$pve-pve.taylor)^2)
+mean((test$meta$pve-pve.sim)^2)
+
+plot(pve.plugin, pve.sim,xlab="estimated pve (plugin)",ylab="estimated pve (sim)")
+plot(pve.taylor, pve.sim,xlab="estimated pve (taylor)",ylab="estimated pve (sim)")
+
+plot(test$meta$pve, pve.naive,xlab="true pve",ylab="estimated pve",col=2,xlim=c(0,1),ylim=c(0,1))
+points(test$meta$pve,pve.sim, col=4)
+abline(0,1,col=1)
+legend("topleft",pch=c(1,1),col=c(2,4),legend=c("pve.naive","pve.sim"))
+```
+
+
