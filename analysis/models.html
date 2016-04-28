@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+
+<title>FASH Models</title>
+
+<script src="libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="libs/bootstrap-3.3.5/css/united.min.css" rel="stylesheet" />
+<script src="libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+
+<style type="text/css">
+
+/* padding for bootstrap navbar */
+body {
+  padding-top: 50px;
+  padding-bottom: 40px;
+}
+
+
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h2 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+.section h3 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+
+
+
+/* don't use link color in navbar */
+.dropdown-menu>li>a {
+  color: black;
+}
+
+/* some padding for disqus */
+#disqus_thread {
+  margin-top: 45px;
+}
+
+</style>
+
+<link rel="stylesheet" href="libs/font-awesome-4.1.0/css/font-awesome.min.css"/>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="libs/highlight/textmate.css"
+      type="text/css" />
+<script src="libs/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script src="libs/navigation-1.0/tabsets.js"></script>
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">ashlar</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="license.html">License</a></li>
+        <li><a href="https://github.com/mengyin/ashlar-fash">GitHub</a></li>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+<h1 class="title">FASH Models</h1>
+
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#models">Models</a></li>
+<li><a href="#posterior-distribution">Posterior distribution</a></li>
+<li><a href="#some-intuition-about-why-ealphahatf-can-be-higher-than-hatf.">Some intuition about why <span class="math inline">\(E(\alpha|\hat{F})\)</span> can be higher than <span class="math inline">\(\hat{F}\)</span>.</a></li>
+</ul>
+</div>
+
+<div id="models" class="section level2">
+<h2>Models</h2>
+<p>Suppose we have a bunch of F-statistics <span class="math display">\[\hat{F}_g=\alpha_g \times F_g, \quad ie \quad \log(\hat{F}_g)=log(\alpha_g)+\log(F_g)\]</span> where <span class="math inline">\(F_g\)</span> is a F-distributed random variable with degrees of freedom <span class="math inline">\(df_1, df_2\)</span>. We want to estimate <span class="math inline">\(\alpha_g\)</span> by combining information across F-statistics.</p>
+<p>Suppose <span class="math inline">\(\alpha_g\)</span>’s are exchangeable, and <span class="math inline">\(\log(\alpha_g)\)</span>’s are generated from a unimodel prior <span class="math inline">\(g(\cdot)\)</span> with unimode at 0 (since in ANOVA <span class="math inline">\(\alpha_g=1\)</span> under the null, and we assume many genes are nulls). We use a mixture uniform distribution to approximate this prior:</p>
+<p><span class="math display">\[g(\cdot)=\pi_0\delta_0+\sum_{k=1}^K \pi_k Unif(0,a_k),\]</span> if <span class="math inline">\(\log(\alpha)\)</span>’s must be non-negative, or</p>
+<p><span class="math display">\[g(\cdot)=\pi_0\delta_0+\sum_{k=1}^K \pi_k Unif(-a_k,a_k),\]</span> if <span class="math inline">\(\log(\alpha)\)</span>’s can be either positive or negative.</p>
+</div>
+<div id="posterior-distribution" class="section level2">
+<h2>Posterior distribution</h2>
+<p>We use the posterior mean of <span class="math inline">\(\alpha\)</span> (or <span class="math inline">\(\log(\alpha)\)</span>) as a shrinkage estimator.</p>
+<p>The posterior distribution of <span class="math inline">\(\log(\alpha)\)</span> is given by <span class="math display">\[ \log(\alpha)|(\hat{F}_1,...,\hat{F}_g) \sim \log(\hat{F}_g)+ \sum_{k=0}^K \tilde{\pi}_k TruncLogF(a_k-\log(\hat{F}_g), b_k-\log(\hat{F}_g), df_2, df_1),\]</span> where <span class="math inline">\(TruncLogF(a,b,v_1,v_2)\)</span> is the truncated log-F distribution with degrees of freedom <span class="math inline">\((v_1,v_2)\)</span> truncated on <span class="math inline">\((a,b)\)</span>, and <span class="math inline">\(\tilde{\pi}_k\)</span>’s are the posterior mixture proportions. So the posterior <span class="math inline">\(\log(\alpha)\)</span> equals to a constant <span class="math inline">\(\log(\hat{F}_g)\)</span> plus a mixture truncated log-F random variable.</p>
+<p>The posterior distribution of <span class="math inline">\(\alpha\)</span> is hence given by <span class="math inline">\(\hat{F}_g\)</span> times a mixture truncated F-distribution.</p>
+</div>
+<div id="some-intuition-about-why-ealphahatf-can-be-higher-than-hatf." class="section level2">
+<h2>Some intuition about why <span class="math inline">\(E(\alpha|\hat{F})\)</span> can be higher than <span class="math inline">\(\hat{F}\)</span>.</h2>
+<p>Since we have <span class="math display">\[\log(\hat{F}_g)=\log(\alpha_g)+\log(F_g),\]</span> our goal is similat to “devolution”: estimate <span class="math inline">\(\log(\alpha)\)</span>, given <span class="math inline">\(\hat{F}\)</span> and knowing the distribution of <span class="math inline">\(\log(F)\)</span> (log-F distribution with df1 &amp; df2).</p>
+<p>Note that log-F distribution can be pretty skewed, e.g log-F(1,198) distribution:</p>
+<pre class="r"><code>hist(log(rf(100000,df1=1,df2=198)), 50)</code></pre>
+<p><img src="models_files/figure-html/unnamed-chunk-1-1.png" title="" alt="" width="672" /></p>
+<p>From the plot we know that <span class="math inline">\(\log(F)\)</span> is often negative, and <span class="math display">\[\log(\hat{F})=\log(\alpha)+\log(F),\]</span> so it makes sense that sometimes <span class="math inline">\(\log(\alpha)\)</span> is higher than <span class="math inline">\(\log(\hat{F})\)</span>, ie <span class="math inline">\(\alpha\)</span> is higher than the F-statistics.</p>
+</div>
+
+
+<!-- some extra javascript for older browsers -->
+<script type="text/javascript" src="libs/polyfill.js"></script>
+
+<script>
+
+// manage active state of menu based on current page
+$(document).ready(function () {
+
+    // active menu
+    href = window.location.pathname
+    href = href.substr(href.lastIndexOf('/') + 1)
+    $('a[href="' + href + '"]').parent().addClass('active');
+
+    // manage active menu header
+    if (href.startsWith('authoring_'))
+      $('a[href="' + 'authoring' + '"]').parent().addClass('active');
+    else if (href.endsWith('_format.html'))
+      $('a[href="' + 'formats' + '"]').parent().addClass('active');
+    else if (href.startsWith('developer_'))
+      $('a[href="' + 'developer' + '"]').parent().addClass('active');
+
+});
+
+</script>
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

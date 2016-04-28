@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+
+<title>An example of comparison between different PVE estimators</title>
+
+<script src="libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="libs/bootstrap-3.3.5/css/united.min.css" rel="stylesheet" />
+<script src="libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+
+<style type="text/css">
+
+/* padding for bootstrap navbar */
+body {
+  padding-top: 50px;
+  padding-bottom: 40px;
+}
+
+
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h2 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+.section h3 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+
+
+
+/* don't use link color in navbar */
+.dropdown-menu>li>a {
+  color: black;
+}
+
+/* some padding for disqus */
+#disqus_thread {
+  margin-top: 45px;
+}
+
+</style>
+
+<link rel="stylesheet" href="libs/font-awesome-4.1.0/css/font-awesome.min.css"/>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="libs/highlight/textmate.css"
+      type="text/css" />
+<script src="libs/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script src="libs/navigation-1.0/tabsets.js"></script>
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">ashlar</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="license.html">License</a></li>
+        <li><a href="https://github.com/mengyin/ashlar-fash">GitHub</a></li>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+<h1 class="title">An example of comparison between different PVE estimators</h1>
+
+</div>
+
+
+<p>In the model <span class="math display">\[Y_{gi}= \mu_g+\beta_{g,c(i)}+e_{gi}\]</span> where <span class="math inline">\(\beta \sim N(0,\sigma^2)\)</span> and <span class="math inline">\(e\sim N(0,s^2)\)</span>, we want to estimate <span class="math display">\[PVE:=\frac{\sigma^2}{s^2+\sigma^2}.\]</span></p>
+<ol style="list-style-type: decimal">
+<li>Naive estimate for PVE based on MST and MSE (<span class="math inline">\(N\)</span>: sample size in each group): <span class="math display">\[\hat{PVE}_{naive}=\frac{MST-MSE}{MST-MSE+N\times MSE}.\]</span></li>
+</ol>
+<p>Since <span class="math inline">\(Fstat = \frac{MST}{MSE}=(1+N\sigma^2/s^2)F(df1,df2)\)</span>, and suppose <span class="math inline">\(\alpha:=(1+N\sigma^2/s^2)\)</span>, we have <span class="math display">\[PVE:=f(\log(\alpha))=1-\frac{N}{exp(\log(\alpha))-1+N}.\]</span></p>
+<p>After obtaining the posterior distribution of <span class="math inline">\(\log(\alpha)\)</span> using fash, there are a few ways to estimate PVE:</p>
+<ol start="2" style="list-style-type: decimal">
+<li><p>Empirical posterior mean of PVE: sample <span class="math inline">\(\log(\alpha)\)</span> from posterior, transform to <span class="math inline">\(PVE\)</span> and compute the empirical posterior mean of <span class="math inline">\(PVE\)</span>.</p></li>
+<li><p>Use Taylor expansion to approximate the posterior mean <span class="math inline">\(E(PVE|D)\)</span>: <span class="math display">\[f(\log(\alpha))\approx f(0)+f&#39;(0)\log(\alpha) = \frac{1}{N}\log(\alpha),\]</span> so <span class="math inline">\(E(PVE|D)\approx \frac{1}{N} E(\log(\alpha)|D)\)</span>.</p></li>
+<li><p>Plugin <span class="math inline">\(E(\log(\alpha)|D)\)</span> into <span class="math inline">\(f(\cdot)\)</span>: <span class="math inline">\(\hat{PVE}_{plugin}=f(E(\log(\alpha)|D))\)</span>.</p></li>
+</ol>
+<pre class="r"><code># PVE from the raw MSTs &amp; MSEs
+pve_ftest = function(nsamp,MST,MSE){
+  sigma.c2.hat = pmax(0,(MST-MSE)/nsamp)
+  sigma.e2.hat = MSE
+  return(sigma.c2.hat/(sigma.c2.hat+sigma.e2.hat))
+}
+
+# PVE = sigma^2/s^2
+# logalpha = (1+nsamp*sigma^2/s^2)
+# So: PVE = (exp(logalpha)-1)/(exp(logalpha)-1+nsamp)
+pve_plugin = function(nsamp,fashobj){
+  (exp(fashobj$PosteriorMean.logf)-1)/(exp(fashobj$PosteriorMean.logf)-1+nsamp)
+}
+
+# compute empirical posterior mean of PVE
+# sample logalpha from posterior distn
+# then transform them into PVEs
+pve_sim = function(nsamp,fashobj){
+  tmp = apply(cbind(c(fashobj$PosteriorTrunclogf_a),c(fashobj$PosteriorTrunclogf_b),
+                    rep(fashobj$logfhat,dim(fashobj$PosteriorTrunclogf_a)[2])),1,
+              pve_sim_each, df1=fashobj$PosteriorTrunclogf_df1, df2=fashobj$PosteriorTrunclogf_df2,
+              nsamp=nsamp)
+  tmp = matrix(tmp, nrow=dim(fashobj$PosteriorTrunclogf_a)[1])
+  colSums(fashobj$PosteriorPi*t(tmp))
+}
+
+# sample logalpha from posterior: truncated logF-distn with a,b,df1,df2 
+# PVE = (exp(logalpha)-1)/(exp(logalpha)-1+nsamp)
+# and compute monte carlo mean of PVE
+pve_sim_each = function(a_b_logfhat,df1,df2,logfhat,nsamp,nsim=10000){
+  a = a_b_logfhat[1]
+  b = a_b_logfhat[2]
+  logfhat = a_b_logfhat[3]
+  if(a==b){
+    return(a+logfhat)
+  }else{
+    logalpha.sim = log(rf(nsim,df1,df2))
+    logalpha.sim = logalpha.sim[logalpha.sim&gt;=a &amp; logalpha.sim&lt;=b]+logfhat
+    if(length(logalpha.sim)&gt;0){
+      pve.sim = (exp(logalpha.sim)-1)/(exp(logalpha.sim)-1+nsamp)
+    }else{
+      pve.sim = (exp((a+b)/2+logfhat)-1)/(exp((a+b)/2+logfhat)-1+nsamp)
+    }
+    return(mean(pve.sim))
+      
+#     # importance sampling
+#     # pve&#39;s range: (pve.a, pve.b)
+#     pve.a = 1-(nsamp/(exp(a+logfhat)-1+nsamp))
+#     pve.b = 1-(nsamp/(exp(b+logfhat)-1+nsamp))
+#     y = runif(nsim,pve.a,pve.b)
+#     w = (1-nsamp/(rf(nsim,df1,df2)*exp(logfhat)-1+nsamp))/dunif(y,pve.a,pve.b) 
+#     mean(w*y*(y&gt;=pve.a &amp; y&lt;=pve.b))
+    
+  }
+}
+
+# Taylor approx: PVE:=f(logalpha)=(logalpha-1)/(logalpha-1+nsamp)
+# f(logalpha)\approx f(0)+f&#39;(0)*logalpha = logalpha/nsamp
+# E(PVE)\approx E(logalpha)/nsamp
+pve_taylor = function(nsamp,fashobj){
+  (fashobj$PosteriorMean.logf)/nsamp
+}</code></pre>
+<p>Define functions to generate dataset:</p>
+<pre class="r"><code># simulate data Y_{gi}=\mu_{gi}+\beta_{g,c(i)}+e_{gi}
+# where \beta~N(0,sigma_g^2), e~N(0,s^2)
+# and log(alpha):=log(1+nsamp*sigma_g^2/s^2)
+# then Fstat~alpha*F(ngroup-1, nsamp*ngroup-ngroup)
+
+# ngene: # of genes
+# nsamp: # of samples for each group
+# ngroup: # of groups
+# mumean, musd: generate true mu&#39;s from N(logrmean, logrsd)
+datamaker = function(args){  
+  #sigma.e = rep(1,args$ngene)
+  if(is.null(args$errshape)){
+    args$errshape = 5
+  }
+  if(is.null(args$errrate)){
+    args$errrate = 5
+  }
+  sigma.e = sqrt(rgamma(args$ngene, args$errshape, args$errrate))
+  
+  # logalpha generated from normal mixture
+  loga = gen_normalmix(args$ngene, 
+                       args$logaargs$pi, args$logaargs$mu, args$logaargs$sd, 
+                       args$pi0)
+  logalpha = abs(loga$beta) # must be postive
+  null = loga$null
+  
+  # logalpha:=log((1+nsamp*sigma.c^2/sigma.e^2))
+  sigma.c = sqrt((exp(logalpha)-1)/args$nsamp*sigma.e^2)
+  
+  mu = rep(0,args$ngene)
+  beta = matrix(rep(rnorm(args$ngene*args$ngroup, 0, rep(sigma.c,each=args$ngroup)), each=args$nsamp), 
+                nrow=args$ngene, byrow=TRUE)
+  e = matrix(rnorm(args$ngene*args$ngroup*args$nsamp, 0, rep(sigma.e, each=args$ngroup*args$nsamp)), 
+             nrow=args$ngene, byrow=TRUE)
+  
+  Y = mu+beta+e
+  condition = factor(rep(1:args$ngroup,each=args$nsamp))
+  
+  ftests = apply(Y,1,get_fstat,condition=condition)
+  fstat = ftests[1,]
+  MST = ftests[2,]
+  MSE = ftests[3,]
+  
+  meta = list(pi0=loga$pi0, logalpha=logalpha, null=null, pve=sigma.c^2/(sigma.c^2+sigma.e^2),
+              logaprior=list(pi=args$logaargs$pi,mu=args$loagargs$mu,sd=args$loagargs$sd), 
+              args=args)
+  
+  input = list(Y=Y, condition=condition, fstat=fstat, MST=MST, MSE=MSE,
+               df1=args$ngroup-1,df2=(args$nsamp-1)*args$ngroup)
+  data = list(meta=meta,input=input)
+  return(data)
+}
+
+get_fstat = function(y,condition){
+  fit = lm(y~condition)
+  fstat = anova(fit)$F[1]
+  MST = anova(fit)$M[1]
+  MSE = anova(fit)$M[2]
+  return(c(fstat,MST,MSE))
+}
+
+# Generate beta from normal mixture prior
+gen_normalmix = function(ngene, pi, mu, sd, pi0){
+  if (pi0==&quot;random&quot;){
+    pi0 = runif(1,0,1) #generate the proportion of true nulls randomly
+  }
+  k = length(pi) # number of components
+  comp = sample(1:k,ngene,pi,replace=TRUE) #randomly draw a component
+  isnull = (runif(ngene,0,1) &lt; pi0)
+  beta = ifelse(isnull, 0, rnorm(ngene,mu[comp],sd[comp]))
+  return(list(beta=beta, pi0=pi0, null=isnull))
+}</code></pre>
+<p>Simulate a dataset (nsamp=10, ngroup=10) and apply fash:</p>
+<pre class="r"><code>source(&quot;../code/fash.R&quot;)</code></pre>
+<pre><code>## Loading required package: stats4</code></pre>
+<pre><code>## Loading required package: evd</code></pre>
+<pre><code>## 
+## Attaching package: &#39;evd&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:ashr&#39;:
+## 
+##     dens</code></pre>
+<pre class="r"><code>set.seed(100)
+
+# alternative log(alpha)&#39;s generated from near-normal distribution
+args=list(ngene=5000, nsamp=10, ngroup=10, pi0=&quot;random&quot;,
+          logaargs=list(pi=c(2/3,1/3),mu=c(0,0),sd=c(1,2)))
+
+# generate test dataset
+test = datamaker(args)
+
+# run fash
+test.fash = fash(test$input$fstat, test$input$df1, test$input$df2, oneside=TRUE)</code></pre>
+<p>Estimate PVE with the four methods and compare their accuracies: pve.plugin almost equals to pve.sim; pve.taylor performs worse. But all three estiamators based on fash give much lower MSEs than that of pve.naive.</p>
+<pre class="r"><code>pve.naive = pve_ftest(test$meta$args$nsamp,test$input$MST,test$input$MSE)
+pve.plugin = pve_plugin(test$meta$args$nsamp,test.fash)
+pve.taylor = pve_taylor(test$meta$args$nsamp,test.fash)
+pve.sim = pve_sim(test$meta$args$nsamp,test.fash)
+
+mean((test$meta$pve-pve.naive)^2)</code></pre>
+<pre><code>## [1] 0.006774271</code></pre>
+<pre class="r"><code>mean((test$meta$pve-pve.plugin)^2)</code></pre>
+<pre><code>## [1] 0.006171681</code></pre>
+<pre class="r"><code>mean((test$meta$pve-pve.taylor)^2)</code></pre>
+<pre><code>## [1] 0.01858269</code></pre>
+<pre class="r"><code>mean((test$meta$pve-pve.sim)^2)</code></pre>
+<pre><code>## [1] 0.006111605</code></pre>
+<pre class="r"><code>plot(pve.plugin, pve.sim,xlab=&quot;estimated pve (plugin)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
+<p><img src="comp_pve_files/figure-html/unnamed-chunk-4-1.png" title="" alt="" width="672" /></p>
+<pre class="r"><code>plot(pve.taylor, pve.sim,xlab=&quot;estimated pve (taylor)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
+<p><img src="comp_pve_files/figure-html/unnamed-chunk-4-2.png" title="" alt="" width="672" /></p>
+<pre class="r"><code>plot(test$meta$pve,pve.sim,xlab=&quot;true pve&quot;,ylab=&quot;estimated pve (sim)&quot;)
+abline(0,1,col=2)</code></pre>
+<p><img src="comp_pve_files/figure-html/unnamed-chunk-4-3.png" title="" alt="" width="672" /></p>
+<p>Try another dataset with smaller sample size: nsamp=2, ngroup=3.</p>
+<pre class="r"><code>set.seed(100)
+
+args=list(ngene=5000, nsamp=2, ngroup=3, pi0=&quot;random&quot;,
+          logaargs=list(pi=c(2/3,1/3),mu=c(0,0),sd=c(1,2)))
+test = datamaker(args)
+test.fash = fash(test$input$fstat, test$input$df1, test$input$df2, oneside=TRUE)
+
+pve.naive = pve_ftest(test$meta$args$nsamp,test$input$MST,test$input$MSE)
+pve.plugin = pve_plugin(test$meta$args$nsamp,test.fash)
+pve.taylor = pve_taylor(test$meta$args$nsamp,test.fash)
+pve.sim = pve_sim(test$meta$args$nsamp,test.fash)
+
+mean((test$meta$pve-pve.naive)^2)</code></pre>
+<pre><code>## [1] 0.1129003</code></pre>
+<pre class="r"><code>mean((test$meta$pve-pve.plugin)^2)</code></pre>
+<pre><code>## [1] 0.06326636</code></pre>
+<pre class="r"><code>mean((test$meta$pve-pve.taylor)^2)</code></pre>
+<pre><code>## [1] 0.08516342</code></pre>
+<pre class="r"><code>mean((test$meta$pve-pve.sim)^2)</code></pre>
+<pre><code>## [1] 0.06170805</code></pre>
+<pre class="r"><code>plot(pve.plugin, pve.sim,xlab=&quot;estimated pve (plugin)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
+<p><img src="comp_pve_files/figure-html/unnamed-chunk-5-1.png" title="" alt="" width="672" /></p>
+<pre class="r"><code>plot(pve.taylor, pve.sim,xlab=&quot;estimated pve (taylor)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
+<p><img src="comp_pve_files/figure-html/unnamed-chunk-5-2.png" title="" alt="" width="672" /></p>
+<pre class="r"><code>plot(test$meta$pve, pve.naive,xlab=&quot;true pve&quot;,ylab=&quot;estimated pve&quot;,col=2,xlim=c(0,1),ylim=c(0,1))
+points(test$meta$pve,pve.sim, col=4)
+abline(0,1,col=1)
+legend(&quot;topleft&quot;,pch=c(1,1),col=c(2,4),legend=c(&quot;pve.naive&quot;,&quot;pve.sim&quot;))</code></pre>
+<p><img src="comp_pve_files/figure-html/unnamed-chunk-5-3.png" title="" alt="" width="672" /></p>
+
+
+<!-- some extra javascript for older browsers -->
+<script type="text/javascript" src="libs/polyfill.js"></script>
+
+<script>
+
+// manage active state of menu based on current page
+$(document).ready(function () {
+
+    // active menu
+    href = window.location.pathname
+    href = href.substr(href.lastIndexOf('/') + 1)
+    $('a[href="' + href + '"]').parent().addClass('active');
+
+    // manage active menu header
+    if (href.startsWith('authoring_'))
+      $('a[href="' + 'authoring' + '"]').parent().addClass('active');
+    else if (href.endsWith('_format.html'))
+      $('a[href="' + 'formats' + '"]').parent().addClass('active');
+    else if (href.startsWith('developer_'))
+      $('a[href="' + 'developer' + '"]').parent().addClass('active');
+
+});
+
+</script>
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+
+<title>Compare voom+limma and voom+limma+fash on pure null RNA-Seq data</title>
+
+<script src="libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="libs/bootstrap-3.3.5/css/united.min.css" rel="stylesheet" />
+<script src="libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+
+<style type="text/css">
+
+/* padding for bootstrap navbar */
+body {
+  padding-top: 50px;
+  padding-bottom: 40px;
+}
+
+
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h2 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+.section h3 {
+  padding-top: 55px;
+  margin-top: -55px;
+}
+
+
+
+/* don't use link color in navbar */
+.dropdown-menu>li>a {
+  color: black;
+}
+
+/* some padding for disqus */
+#disqus_thread {
+  margin-top: 45px;
+}
+
+</style>
+
+<link rel="stylesheet" href="libs/font-awesome-4.1.0/css/font-awesome.min.css"/>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="libs/highlight/textmate.css"
+      type="text/css" />
+<script src="libs/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script src="libs/navigation-1.0/tabsets.js"></script>
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">ashlar</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="license.html">License</a></li>
+        <li><a href="https://github.com/mengyin/ashlar-fash">GitHub</a></li>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+<h1 class="title">Compare voom+limma and voom+limma+fash on pure null RNA-Seq data</h1>
+
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#session-information">Session information</a></li>
+</ul>
+</div>
+
+<p><strong>Last updated:</strong> 2016-04-28</p>
+<p><strong>Code version:</strong> 9f3adeea9d03e68822819a11783a8ee24a9046a8</p>
+<p>Define functions to generate pure null RNA-Seq datasets (we use GTEx data).</p>
+<pre class="r"><code>library(edgeR)</code></pre>
+<pre><code>Loading required package: limma</code></pre>
+<pre class="r"><code>library(limma)
+library(qvalue)</code></pre>
+<pre><code>Warning: replacing previous import by &#39;grid::arrow&#39; when loading &#39;qvalue&#39;</code></pre>
+<pre><code>Warning: replacing previous import by &#39;grid::unit&#39; when loading &#39;qvalue&#39;</code></pre>
+<pre class="r"><code>source(&quot;../code/fash.R&quot;)</code></pre>
+<pre><code>Loading required package: stats4</code></pre>
+<pre><code>Loading required package: evd</code></pre>
+<pre><code>
+Attaching package: &#39;evd&#39;</code></pre>
+<pre><code>The following object is masked from &#39;package:ashr&#39;:
+
+    dens</code></pre>
+<pre class="r"><code>datamaker = function(args){  
+  rawdata = read.table(&quot;/Volumes/PERSONAL/MS/gtex/tissues/Muscle-Skeletal.txt&quot;,header=TRUE)
+  
+  # randomly choose samples for each gene
+  counts = selectsample(rawdata, args$nsamp*args$ngroup, args$breaksample)
+  rm(&quot;rawdata&quot;)
+
+  # Remove genes without any reads
+  counts = counts[apply(counts,1,sum)&gt;0,]
+  
+  # Take the top Ngene high-expressed genes
+  counts = counts[sort(order(rowSums(counts),decreasing=TRUE)[1:args$ngene]),]
+  
+  condition = factor(rep(1:args$ngroup,each=args$nsamp))
+  
+  # Voom transformation + limma
+  voomlim = voom_transform(counts, condition)
+  
+  # f-test
+  ftest = varcomp_voom(voomlim$v, condition)
+  
+  # meta data
+  meta = list(args=args)
+  
+  # input data
+  input = list(counts=counts, condition=condition, 
+               v=voomlim$v, avelogcpm=voomlim$avelogcpm, 
+               fstats.limma=voomlim$fstats, pve.limma=voomlim$pve, pvalue.limma=voomlim$pvalue,
+               df1.limma=args$ngroup-1, df2.limma=voomlim$lim$df.total[1],
+               fstats.ftest=ftest$fstats, pve.ftest=ftest$pve)  
+  data = list(meta=meta,input=input)
+  return(data)
+}
+
+# Voom transformation
+voom_transform = function(counts, condition, W=NULL){
+  dgecounts = calcNormFactors(DGEList(counts=counts,group=condition))
+  
+  if (is.null(W)){
+    design = model.matrix(~condition)
+  }else{
+    design = model.matrix(~condition+W)
+  }
+  
+  v = voom(dgecounts,design,plot=FALSE)
+  lim = lmFit(v)
+  lim = eBayes(lim[,-1])
+  pve = pve_ftest(length(condition)/length(unique(condition)), 
+                  lim$s2.post*lim$F, lim$s2.post)
+  
+  dgecounts = estimateDisp(dgecounts, design, robust=TRUE)
+  avelogcpm = dgecounts$AveLogCPM
+  
+  return(list(v=v, lim=lim, avelogcpm=avelogcpm, 
+              fstats=lim$F, pvalue=lim$F.p.value, pve=pve))
+}
+
+varcomp_voom = function(v, condition){
+  combo = cbind(v$E,v$weights)
+  tmp = apply(combo,1,voom_ftest,condition=condition)
+  MST=tmp[2,]
+  MSE=tmp[3,]
+  pve = pve_ftest(length(condition)/length(unique(condition)), MST, MSE)
+  return(list(fstats=tmp[1,], MST=MST, MSE=MSE, pve=pve))
+}
+
+voom_ftest = function(ynweights,condition){
+  y = ynweights[1:(length(ynweights)/2)]
+  weights = ynweights[(length(ynweights)/2+1):length(ynweights)]
+  fit = lm(y~condition, weights=weights)
+  MST = anova(fit)$M[1]
+  MSE = anova(fit)$M[length(anova(fit)$M)]
+  fstat = anova(fit)$F[1]
+  return(c(fstat,MST,MSE))
+}
+
+# randomly subsample data for each gene
+# gene: a vector of reads for one gene
+# nsamp: # of samples wanted
+sampleingene = function(gene, nsamp){
+  sample = sample(length(gene),nsamp)
+  return(c(gene[sample]))
+}
+
+# Randomly select samples
+# counts: full count matrix
+# nsamp: # of samples wanted
+# breaksample: flag, if select different samples for each gene
+selectsample = function(counts, nsamp, breaksample){
+  if (breaksample==FALSE){
+    subsample = sample(1:dim(counts)[2],nsamp)
+    counts = counts[,subsample]
+  }else{
+    counts = t(apply(counts, 1, sampleingene, nsamp=nsamp))
+  }
+  return(counts)
+}
+
+pve_ftest = function(nsamp,MST,MSE){
+  sigma.c2.hat = pmax(0,(MST-MSE)/nsamp)
+  sigma.e2.hat = MSE
+  return(sigma.c2.hat/(sigma.c2.hat+sigma.e2.hat))
+}
+
+pve_plugin = function(nsamp,fashobj){
+  (exp(fashobj$PosteriorMean.logf)-1)/(exp(fashobj$PosteriorMean.logf)-1+nsamp)
+}</code></pre>
+<p>Sample a pure null dataset (independent genes): for each gene, randomly choose 250 samples from same condition (tissue). Separate them into 5 groups with 50 samples each group.</p>
+<pre class="r"><code>set.seed(1234)
+# Generate a pure null dataset
+args = list(ngene=10000, ngroup=5, nsamp=50, breaksample=TRUE)
+test = datamaker(args)
+
+# fash
+test.fash = fash(test$input$fstats.limma, test$input$df1.limma, test$input$df2.limma, oneside=TRUE)
+pve.fash = pve_plugin(args$nsamp, test.fash)
+
+# p-values of voom+limma&#39;s moderated F-test
+hist(test$input$pvalue,30, xlab=&quot;voom+limma p-value&quot;, main=&quot;Histogram of p-value&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-2-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Number of genes called significant
+sum(qvalue(test$input$pvalue.limma)$qval&lt;=0.05) # voom+limma</code></pre>
+<pre><code>[1] 0</code></pre>
+<pre class="r"><code>sum(test.fash$qval&lt;=0.05) # fash</code></pre>
+<pre><code>[1] 0</code></pre>
+<pre class="r"><code># estimated PVE&#39;s
+plot(test$input$avelogcpm, test$input$pve.ftest, ylim=c(0,0.2),
+     xlab=&quot;average log-cpm&quot;, ylab=&quot;estimated pve&quot;, main=&quot;ngroup=5, nsamp=50&quot;)
+points(test$input$avelogcpm, test$input$pve.limma, col=2)
+points(test$input$avelogcpm, pve.fash, col=3)
+legend(&quot;topright&quot;,pch=1, col=c(1,2,3),legend=c(&quot;voom+ftest&quot;,&quot;voom+limma&quot;,&quot;voom+limma+fash&quot;))</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-2-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># loess curve of estimated PVE&#39;s
+scatter.smooth(test$input$avelogcpm, test$input$pve.ftest, col=&quot;blue&quot;,ylab=&quot;pve.ftest&quot;,ylim=c(0,0.2),
+               main=&quot;loess curve of the estimated PVE&#39;s&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-2-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>scatter.smooth(test$input$avelogcpm, test$input$pve.limma, col=&quot;blue&quot;, ylab=&quot;pve.limma&quot;,ylim=c(0,0.2),
+               main=&quot;loess curve of the estimated PVE&#39;s&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-2-4.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>scatter.smooth(test$input$avelogcpm, pve.fash,col=&quot;blue&quot;,ylab=&quot;pve.fash&quot;,ylim=c(0,0.2),
+               main=&quot;loess curve of the estimated PVE&#39;s&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-2-5.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<p>Try a small sample size dataset: 3 groups, 2 samples in each group.</p>
+<pre class="r"><code># Generate a pure null dataset
+args = list(ngene=10000, ngroup=3, nsamp=2, breaksample=TRUE)
+test = datamaker(args)
+
+# fash
+test.fash = fash(test$input$fstats.limma, test$input$df1.limma, test$input$df2.limma, oneside=TRUE)
+pve.fash = pve_plugin(args$nsamp, test.fash)
+
+# p-values of voom+limma&#39;s moderated F-test
+hist(test$input$pvalue,30, xlab=&quot;voom+limma p-value&quot;,main=&quot;Histogram of p-value&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-3-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Number of genes called significant
+sum(qvalue(test$input$pvalue.limma)$qval&lt;=0.05) # voom+limma</code></pre>
+<pre><code>[1] 0</code></pre>
+<pre class="r"><code>sum(test.fash$qval&lt;=0.05) # fash</code></pre>
+<pre><code>[1] 0</code></pre>
+<pre class="r"><code># estimated PVE&#39;s
+plot(test$input$avelogcpm, test$input$pve.ftest, ylim=c(0,1),
+     xlab=&quot;average log-cpm&quot;, ylab=&quot;estimated pve&quot;, main=&quot;ngroup=3, nsamp=2&quot;)
+points(test$input$avelogcpm, test$input$pve.limma, col=2)
+points(test$input$avelogcpm, pve.fash, col=3)
+legend(&quot;topright&quot;,pch=1, col=c(1,2,3),legend=c(&quot;voom+ftest&quot;,&quot;voom+limma&quot;,&quot;voom+limma+fash&quot;))</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-3-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># loess curve of estimated PVE&#39;s
+scatter.smooth(test$input$avelogcpm, test$input$pve.ftest, col=&quot;blue&quot;,ylab=&quot;pve.ftest&quot;,ylim=c(0,1),
+               main=&quot;loess curve of the estimated PVE&#39;s&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-3-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>scatter.smooth(test$input$avelogcpm, test$input$pve.limma, col=&quot;blue&quot;, ylab=&quot;pve.limma&quot;,ylim=c(0,1),
+               main=&quot;loess curve of the estimated PVE&#39;s&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-3-4.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>scatter.smooth(test$input$avelogcpm, pve.fash,col=&quot;blue&quot;,ylab=&quot;pve.fash&quot;,ylim=c(0,1),
+               main=&quot;loess curve of the estimated PVE&#39;s&quot;)</code></pre>
+<p><img src="figure/null_voom_ftest.Rmd/unnamed-chunk-3-5.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<div id="session-information" class="section level2">
+<h2>Session information</h2>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.2.3 (2015-12-10)
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+Running under: OS X 10.10.5 (Yosemite)
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+[1] REBayes_0.62    Matrix_1.2-3    truncdist_1.0-1 evd_2.3-2      
+[5] ashr_1.0.12     qvalue_2.2.0    edgeR_3.10.5    limma_3.24.15  
+[9] knitr_1.12.3   
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_0.12.4       magrittr_1.5      MASS_7.3-45      
+ [4] splines_3.2.3     statmod_1.4.24    pscl_1.4.9       
+ [7] munsell_0.4.3     doParallel_1.0.10 lattice_0.20-33  
+[10] SQUAREM_2014.8-1  colorspace_1.2-6  foreach_1.4.3    
+[13] stringr_1.0.0     plyr_1.8.3        tools_3.2.3      
+[16] parallel_3.2.3    grid_3.2.3        gtable_0.1.2     
+[19] iterators_1.0.8   htmltools_0.3     yaml_2.1.13      
+[22] digest_0.6.9      reshape2_1.4.1    ggplot2_2.0.0    
+[25] formatR_1.2.1     codetools_0.2-14  evaluate_0.8     
+[28] rmarkdown_0.9.5   stringi_1.0-1     Rmosek_7.1.2     
+[31] scales_0.3.0      locfit_1.5-9.1    truncnorm_1.0-7  </code></pre>
+</div>
+
+
+<!-- some extra javascript for older browsers -->
+<script type="text/javascript" src="libs/polyfill.js"></script>
+
+<script>
+
+// manage active state of menu based on current page
+$(document).ready(function () {
+
+    // active menu
+    href = window.location.pathname
+    href = href.substr(href.lastIndexOf('/') + 1)
+    $('a[href="' + href + '"]').parent().addClass('active');
+
+    // manage active menu header
+    if (href.startsWith('authoring_'))
+      $('a[href="' + 'authoring' + '"]').parent().addClass('active');
+    else if (href.endsWith('_format.html'))
+      $('a[href="' + 'formats' + '"]').parent().addClass('active');
+    else if (href.startsWith('developer_'))
+      $('a[href="' + 'developer' + '"]').parent().addClass('active');
+
+});
+
+</script>
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
