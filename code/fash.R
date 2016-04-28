@@ -157,6 +157,11 @@ fash = function(fhat, df1, df2,
   PosteriorMean.logf[completeobs] = postmean_logf(pi.fit$g,logfhat[completeobs],df1,df2)
   #PosteriorSD[completeobs] = postsd(pi.fit$g,betahat[completeobs],sebetahat[completeobs],df)
   
+  # Posterior distribution of logalpha: mixture truncated log-f
+  PosteriorPi = comppostprob_logf(pi.fit$g,logfhat[completeobs],df1,df2)
+  PosteriorTrunclogf_a = outer(-logfhat[completeobs], pi.fit$g$a,FUN="+")
+  PosteriorTrunclogf_b = outer(-logfhat[completeobs], pi.fit$g$b,FUN="+")
+  
   PositiveProb = 1- NegativeProb-ZeroProb
   lfsr = compute_lfsr(NegativeProb,ZeroProb)
   lfsra = compute_lfsra(PositiveProb,NegativeProb,ZeroProb) 
@@ -164,9 +169,13 @@ fash = function(fhat, df1, df2,
   qvalue = qval.from.lfdr(lfdr)
   
   return(list(fitted.g=pi.fit$g, fit=pi.fit, 
-              PosteriorMean.f=PosteriorMean.f, PosteriorMean.logf=PosteriorMean.logf,
+              PosteriorMean.f=PosteriorMean.f, PosteriorMean.logf=PosteriorMean.logf, 
+              PosteriorPi=PosteriorPi,
+              PosteriorTrunclogf_a=PosteriorTrunclogf_a, PosteriorTrunclogf_b=PosteriorTrunclogf_b,
+              PosteriorTrunclogf_df1=df2,PosteriorTrunclogf_df2=df1,
               ZeroProb=ZeroProb, NegativeProb=NegativeProb, PositiveProb=PositiveProb,
-              qvalue=qvalue, lfsr=lfsr, lfsra=lfsra, lfdr=lfdr))
+              qvalue=qvalue, lfsr=lfsr, lfsra=lfsra, lfdr=lfdr,
+              logfhat=logfhat))
   
 }
 
@@ -310,7 +319,7 @@ my_etruncf= function(a_b,v1,v2,lowthres,highthres){
   b = a_b[2]
   if (a==b){
     tmp = a
-  }else{
+  }else{    
     if (b>highthres | a<lowthres){
       tmp = etruncf(df1=v1, df2=v2, a=a, b=b)
       if (is.na(tmp)){
@@ -387,23 +396,24 @@ comp_postmean_logf = function(m,logfhat,v1,v2){
 
 # vectorized funtion to compute mean of truncated log-F distribution on [a,b]
 my_etrunclogf_vec = function(a_b,v1,v2,log=FALSE){
-  tmp = apply(a_b,1,my_etrunclogf,v1=v1,v2=v2,
-              lowthres=log(qf(1e-10,v1,v2)),
-              highthres=log(qf(1-1e-10,v1,v2)))
+  tmp = apply(a_b,1,my_etrunclogf,v1=v1,v2=v2)
 }
 
-my_etrunclogf= function(a_b,v1,v2,lowthres,highthres){
+my_etrunclogf= function(a_b,v1,v2){
   a = a_b[1]
   b = a_b[2]
   if (a==b){
     tmp = a
   }else{
-    if (a<=highthres & b>=lowthres){
-      tmp = etrunclogf(df1=v1, df2=v2, a=a, b=b, adj=FALSE)
-    }else{
-      tmp = etrunclogf(df1=v1, df2=v2, a=a, b=b, adj=TRUE)
+    tmp = try(etrunclogf(df1=v1, df2=v2, a=a, b=b, adj=FALSE),silent=TRUE)
+    if (class(tmp)=="try-error"){
+      tmp = try(etrunclogf(df1=v1, df2=v2, a=a, b=b, adj=TRUE),silent=TRUE)
     }
     
+    if (class(tmp)=="try-error"){
+      #tmp = NA
+      tmp = (a+b)/2
+    }
   }
   return(tmp) #deal with extreme case a=b
 }
@@ -423,6 +433,10 @@ etrunclogf_denom = function(x,df1,df2,a,b){
 # x multiply by the density of truncated log-F distribution on (a,b) at x
 xdtrunclogf = function(x,df1,df2,a,b){
   x*df(exp(x),df1=df1,df2=df2)*exp(x)/(pf(exp(b),df1,df2)-pf(exp(a),df1,df2))
+}
+
+dlogf = function(x,df1,df2){
+  df(exp(x),df1=df1,df2=df2)*exp(x)
 }
 
 etrunclogf = function(df1,df2,a,b,adj=FALSE){
