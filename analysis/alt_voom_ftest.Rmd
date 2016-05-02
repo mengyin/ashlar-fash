@@ -26,9 +26,9 @@ Now our goal is to model the random effect $X\beta_g$. A few possible ways (note
   * Model 2: $Y_g=\mu_g+X\beta_g+W_g^{-1/2}e_g$ and $\beta_g\sim N(0,\sigma_g^2N(X^TW_gX)^{-1})$. In the balanced design model, this assumption means that $\beta_g$'s variance is inversely proportional to the average observation's weights within each group. So the ANOVA's F-statistic will follow the distribution (Johnson 2007) 
   \[F_g\sim (1+N\sigma_g^2/s_g^2)F(K-1,NK-K).\]
 
-  * Model 3: $\tilde{Y}_g:=W_g^{1/2}Y_g=\tilde{\mu}_g+X\tilde{\beta_g}+e_g$ and $\tilde{\beta}_g\sim N(0,\sigma_g^2 I_{K \times K})$. However $\tilde{\beta}$ is different from $\beta$ and the interpretation changes!
-  
-We check whether Model 2's assumption is sensible on GTEx data.
+  * Model 3: $Y_g=\mu_g+W_g^{-1/2}X\tilde{\beta_g}+W_g^{-1/2}e_g$ and $\tilde{\beta}_g\sim N(0,\sigma_g^2 I_{K \times K})$. Note that $\tilde{\beta}$ is different from $\beta$ defined in voom paper and the interpretation changes!
+
+We check whether Model 2 and Model 3's assumption is sensible on GTEx data.
 
 First define functions to generate RNA-Seq datasets (we use GTEx data). Here we use data from multiple tissues (conditions), and analyze the conditional effects using F-test, limma or fash (on voom-transformed data). 
 ```{r}
@@ -187,7 +187,8 @@ args = list(tissue=c("Brain-Amygdala","Brain-Caudate(basalganglia)","Brain-Cereb
 test = datamaker(args)
 ```
 
-Since Model 2 assumes that $Var(\beta)=\sigma^2(X^TWX)^{-1}$, where $\sigma^2$'s are exchangeable across genes and do not depend on count levels. We plot the normalized effect sizes $\tilde{\beta}_g:=\beta_g/(X^TW_gX)^{-1/2}$ such that their variances are exchangeble. We see there are no obvious trend between the distribution of $sd(\tilde{\beta}_g)$ and the average log-cpm values if we remove the leverage points on the right. 
+## Check model 2
+Since Model 2 assumes that $Var(\beta)=\sigma^2N(X^TWX)^{-1}$, where $\sigma^2$'s are exchangeable across genes and do not depend on count levels. Therefore the variances of the normalized effect sizes $\beta^*_g:=\beta_g/\sqrt{N(X^TWX)^{-1}}$ should be exchangeable. We see that there are no obvious trend between the distribution of $sd(\hat{\beta^*})$ and the average log-cpm values if we remove the leverage points on the right. 
 ```{r}
 # compute the normalizing factors (X'WX) for each gene
 scalew_vec = function(weights, condition){
@@ -203,22 +204,52 @@ scalew = function(W, X){
 # fit the regression coefficients beta
 lim = lmFit(test$input$v,model.matrix(~test$input$condition))
 
-# normalize beta by sqrt(X'WX)
+# normalize beta by sqrt(X'WX)^(-1)
 weights_beta = scalew_vec(test$input$v$weights,test$input$condition)
-coef_w = lim$coefficients[,-1]/sqrt(weights_beta) # no intercept
+coef_w = lim$coefficients[,-1]/sqrt(test$meta$args$nsamp*weights_beta) # no intercept
 
 # plot sd's of normalized beta against average log-cpm
 sd_coef_w = apply(coef_w, 1, sd)
-scatter.smooth(test$input$avelogcpm, sd_coef_w,col=2,
-               xlab="average log-cpm", ylab="sd(nomalized coef)")
+scatter.smooth(test$input$avelogcpm, sd_coef_w,col=2,ylim=c(0,10),
+               xlab="average log-cpm", ylab="sd(beta_star)",main="Model 2")
 
 # remove some leverage points on the right
 scatter.smooth(test$input$avelogcpm[test$input$avelogcpm<8], sd_coef_w[test$input$avelogcpm<8],
-               col=2,xlab="average log-cpm", ylab="sd(nomalized coef)")
+               ylim=c(0,10),col=2,xlab="average log-cpm", ylab="sd(beta_star)",main="Model 2")
 ```
 
-Reference:
-Johnson, Valen E. "Properties of Bayes factors based on test statistics." Scandinavian Journal of Statistics 35.2 (2008): 354-368.
+## Check Model 3
+We fit $\tilde{\beta}$ by running a simple linear regression data on centered and normalized data $\tilde{Y}_g:=W_g^{1/2}(Y_g-\mu_g)=X\tilde{\beta}_g+e_g$. Since Model 3 assumes that $\tilde{\beta}_g\sim N(0,\sigma_g^2)$ and $\sigma_g^2$ does not depend on count level, we can plot $sd(\hat{\tilde{\beta}})$ against the average log-cpm values and check if there is obvious trend. Similar to the above discussion for Model 2, there is no obvious relationship between them if we drop some leverage points on the right. 
+```{r}
+# Y_tilde is centered and normalized by error weights
+Y_tilde = (test$input$v$E-lim$coefficients[,1])*sqrt(test$input$v$weights)
+
+# fit beta_tilde
+reg = function(y,condition){
+  m = lm(y~condition)
+  m$coef+c(0,rep(m$coef[1],length(m$coef)-1))
+}
+coef_tilde = t(apply(Y_tilde,1,reg, condition=test$input$condition))
+
+# plot plot sd's of beta_tilde against average log-cpm
+sd_coef_tilde = apply(coef_tilde[,-1],1,sd)
+scatter.smooth(test$input$avelogcpm, sd_coef_tilde,col=2,ylim=c(0,10),
+               xlab="average log-cpm", ylab="sd(beta_tilde)",main="Model 3")
+
+# remove some leverage points on the right
+scatter.smooth(test$input$avelogcpm[test$input$avelogcpm<8], sd_coef_tilde[test$input$avelogcpm<8],
+               col=2,ylim=c(0,10),xlab="average log-cpm", ylab="sd(beta_tilde)",main="Model 3")
+```
+
+Actually in this dataset, Model 2's $sd(\hat{\tilde{\beta}})$ and Model 3's $sd(\hat{\tilde{\beta}})$ are almost same. 
+```{r}
+plot(sd_coef_w,sd_coef_tilde, xlab="Model 2: sd(beta_star)",ylab="Model 3: sd(beta_tilde)")
+abline(0,1,col=2)
+```
+
+## Reference
+[1] Johnson, Valen E. "Properties of Bayes factors based on test statistics." Scandinavian Journal of Statistics 35.2 (2008): 354-368.
+[2] Johnson, Valen E. "Bayes factors based on test statistics." Journal of the Royal Statistical Society: Series B (Statistical Methodology) 67.5 (2005): 689-701.
 
 ## Session information
 
