@@ -168,7 +168,14 @@ $(document).ready(function () {
 
 </div>
 
+<div id="TOC">
+<ul>
+<li><a href="#session-information">Session information</a></li>
+</ul>
+</div>
 
+<p><strong>Last updated:</strong> 2016-05-02</p>
+<p><strong>Code version:</strong> 7558ec4619874ca9638dbca13c3b63b2397145f7</p>
 <p>In the model <span class="math display">\[Y_{gi}= \mu_g+\beta_{g,c(i)}+e_{gi}\]</span> where <span class="math inline">\(\beta \sim N(0,\sigma^2)\)</span> and <span class="math inline">\(e\sim N(0,s^2)\)</span>, we want to estimate <span class="math display">\[PVE:=\frac{\sigma^2}{s^2+\sigma^2}.\]</span></p>
 <ol style="list-style-type: decimal">
 <li>Naive estimate for PVE based on MST and MSE (<span class="math inline">\(N\)</span>: sample size in each group): <span class="math display">\[\hat{PVE}_{naive}=\frac{MST-MSE}{MST-MSE+N\times MSE}.\]</span></li>
@@ -317,13 +324,13 @@ gen_normalmix = function(ngene, pi, mu, sd, pi0){
 }</code></pre>
 <p>Simulate a dataset (nsamp=10, ngroup=10) and apply fash:</p>
 <pre class="r"><code>source(&quot;../code/fash.R&quot;)</code></pre>
-<pre><code>## Loading required package: stats4</code></pre>
-<pre><code>## Loading required package: evd</code></pre>
-<pre><code>## 
-## Attaching package: &#39;evd&#39;</code></pre>
-<pre><code>## The following object is masked from &#39;package:ashr&#39;:
-## 
-##     dens</code></pre>
+<pre><code>Loading required package: stats4</code></pre>
+<pre><code>Loading required package: evd</code></pre>
+<pre><code>
+Attaching package: &#39;evd&#39;</code></pre>
+<pre><code>The following object is masked from &#39;package:ashr&#39;:
+
+    dens</code></pre>
 <pre class="r"><code>set.seed(100)
 
 # alternative log(alpha)&#39;s generated from near-normal distribution
@@ -342,20 +349,20 @@ pve.taylor = pve_taylor(test$meta$args$nsamp,test.fash)
 pve.sim = pve_sim(test$meta$args$nsamp,test.fash)
 
 mean((test$meta$pve-pve.naive)^2)</code></pre>
-<pre><code>## [1] 0.006774271</code></pre>
+<pre><code>[1] 0.006774271</code></pre>
 <pre class="r"><code>mean((test$meta$pve-pve.plugin)^2)</code></pre>
-<pre><code>## [1] 0.006171681</code></pre>
+<pre><code>[1] 0.006171681</code></pre>
 <pre class="r"><code>mean((test$meta$pve-pve.taylor)^2)</code></pre>
-<pre><code>## [1] 0.01858269</code></pre>
+<pre><code>[1] 0.01858269</code></pre>
 <pre class="r"><code>mean((test$meta$pve-pve.sim)^2)</code></pre>
-<pre><code>## [1] 0.006111605</code></pre>
+<pre><code>[1] 0.006111605</code></pre>
 <pre class="r"><code>plot(pve.plugin, pve.sim,xlab=&quot;estimated pve (plugin)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
-<p><img src="comp_pve_files/figure-html/unnamed-chunk-4-1.png" title="" alt="" width="672" /></p>
+<p><img src="figure/comp_pve.Rmd/unnamed-chunk-4-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
 <pre class="r"><code>plot(pve.taylor, pve.sim,xlab=&quot;estimated pve (taylor)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
-<p><img src="comp_pve_files/figure-html/unnamed-chunk-4-2.png" title="" alt="" width="672" /></p>
+<p><img src="figure/comp_pve.Rmd/unnamed-chunk-4-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
 <pre class="r"><code>plot(test$meta$pve,pve.sim,xlab=&quot;true pve&quot;,ylab=&quot;estimated pve (sim)&quot;)
 abline(0,1,col=2)</code></pre>
-<p><img src="comp_pve_files/figure-html/unnamed-chunk-4-3.png" title="" alt="" width="672" /></p>
+<p><img src="figure/comp_pve.Rmd/unnamed-chunk-4-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
 <p>Try another dataset with smaller sample size: nsamp=2, ngroup=3.</p>
 <pre class="r"><code>set.seed(100)
 
@@ -370,22 +377,50 @@ pve.taylor = pve_taylor(test$meta$args$nsamp,test.fash)
 pve.sim = pve_sim(test$meta$args$nsamp,test.fash)
 
 mean((test$meta$pve-pve.naive)^2)</code></pre>
-<pre><code>## [1] 0.1129003</code></pre>
+<pre><code>[1] 0.1129003</code></pre>
 <pre class="r"><code>mean((test$meta$pve-pve.plugin)^2)</code></pre>
-<pre><code>## [1] 0.06326636</code></pre>
+<pre><code>[1] 0.06326636</code></pre>
 <pre class="r"><code>mean((test$meta$pve-pve.taylor)^2)</code></pre>
-<pre><code>## [1] 0.08516342</code></pre>
+<pre><code>[1] 0.08516342</code></pre>
 <pre class="r"><code>mean((test$meta$pve-pve.sim)^2)</code></pre>
-<pre><code>## [1] 0.06170805</code></pre>
+<pre><code>[1] 0.06170805</code></pre>
 <pre class="r"><code>plot(pve.plugin, pve.sim,xlab=&quot;estimated pve (plugin)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
-<p><img src="comp_pve_files/figure-html/unnamed-chunk-5-1.png" title="" alt="" width="672" /></p>
+<p><img src="figure/comp_pve.Rmd/unnamed-chunk-5-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
 <pre class="r"><code>plot(pve.taylor, pve.sim,xlab=&quot;estimated pve (taylor)&quot;,ylab=&quot;estimated pve (sim)&quot;)</code></pre>
-<p><img src="comp_pve_files/figure-html/unnamed-chunk-5-2.png" title="" alt="" width="672" /></p>
+<p><img src="figure/comp_pve.Rmd/unnamed-chunk-5-2.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
 <pre class="r"><code>plot(test$meta$pve, pve.naive,xlab=&quot;true pve&quot;,ylab=&quot;estimated pve&quot;,col=2,xlim=c(0,1),ylim=c(0,1))
 points(test$meta$pve,pve.sim, col=4)
 abline(0,1,col=1)
 legend(&quot;topleft&quot;,pch=c(1,1),col=c(2,4),legend=c(&quot;pve.naive&quot;,&quot;pve.sim&quot;))</code></pre>
-<p><img src="comp_pve_files/figure-html/unnamed-chunk-5-3.png" title="" alt="" width="672" /></p>
+<p><img src="figure/comp_pve.Rmd/unnamed-chunk-5-3.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
+<div id="session-information" class="section level2">
+<h2>Session information</h2>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.2.3 (2015-12-10)
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+Running under: OS X 10.10.5 (Yosemite)
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+[1] REBayes_0.62    Matrix_1.2-3    truncdist_1.0-1 evd_2.3-2      
+[5] ashr_1.0.12     knitr_1.12.3   
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_0.12.4       magrittr_1.5      MASS_7.3-45      
+ [4] doParallel_1.0.10 pscl_1.4.9        SQUAREM_2014.8-1 
+ [7] lattice_0.20-33   foreach_1.4.3     stringr_1.0.0    
+[10] tools_3.2.3       parallel_3.2.3    grid_3.2.3       
+[13] htmltools_0.3     iterators_1.0.8   yaml_2.1.13      
+[16] digest_0.6.9      formatR_1.2.1     codetools_0.2-14 
+[19] evaluate_0.8      rmarkdown_0.9.5   stringi_1.0-1    
+[22] Rmosek_7.1.2      truncnorm_1.0-7  </code></pre>
+</div>
 
 
 <!-- some extra javascript for older browsers -->

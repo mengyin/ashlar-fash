@@ -2,6 +2,14 @@
 title: "FASH Models"
 output: pdf_document
 ---
+**Last updated:** `r Sys.Date()`
+
+**Code version:** `r system("git log -1 --format='%H'", intern = TRUE)`
+
+```{r chunk-options, include=FALSE}
+source("chunk-options.R")
+```
+
 
 ## Models
 Suppose we have a bunch of F-statistics 

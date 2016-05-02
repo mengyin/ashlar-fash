@@ -176,6 +176,8 @@ $(document).ready(function () {
 </ul>
 </div>
 
+<p><strong>Last updated:</strong> 2016-05-02</p>
+<p><strong>Code version:</strong> 7558ec4619874ca9638dbca13c3b63b2397145f7</p>
 <div id="models" class="section level2">
 <h2>Models</h2>
 <p>Suppose we have a bunch of F-statistics <span class="math display">\[\hat{F}_g=\alpha_g \times F_g, \quad ie \quad \log(\hat{F}_g)=log(\alpha_g)+\log(F_g)\]</span> where <span class="math inline">\(F_g\)</span> is a F-distributed random variable with degrees of freedom <span class="math inline">\(df_1, df_2\)</span>. We want to estimate <span class="math inline">\(\alpha_g\)</span> by combining information across F-statistics.</p>
@@ -194,7 +196,7 @@ $(document).ready(function () {
 <p>Since we have <span class="math display">\[\log(\hat{F}_g)=\log(\alpha_g)+\log(F_g),\]</span> our goal is similat to “devolution”: estimate <span class="math inline">\(\log(\alpha)\)</span>, given <span class="math inline">\(\hat{F}\)</span> and knowing the distribution of <span class="math inline">\(\log(F)\)</span> (log-F distribution with df1 &amp; df2).</p>
 <p>Note that log-F distribution can be pretty skewed, e.g log-F(1,198) distribution:</p>
 <pre class="r"><code>hist(log(rf(100000,df1=1,df2=198)), 50)</code></pre>
-<p><img src="models_files/figure-html/unnamed-chunk-1-1.png" title="" alt="" width="672" /></p>
+<p><img src="figure/models.Rmd/unnamed-chunk-1-1.png" title="" alt="" width="672" style="display: block; margin: auto;" /></p>
 <p>From the plot we know that <span class="math inline">\(\log(F)\)</span> is often negative, and <span class="math display">\[\log(\hat{F})=\log(\alpha)+\log(F),\]</span> so it makes sense that sometimes <span class="math inline">\(\log(\alpha)\)</span> is higher than <span class="math inline">\(\log(\hat{F})\)</span>, ie <span class="math inline">\(\alpha\)</span> is higher than the F-statistics.</p>
 </div>
 
